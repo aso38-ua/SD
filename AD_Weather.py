@@ -1,36 +1,45 @@
-
-import mysql.connector
+import sqlite3
 import socket 
 import threading
 import random
+import sys
 
 HEADER = 64
-PORT = 5050
+PORT = 5052
 SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 FIN = "FIN"
 MAX_CONEXIONES = 2
 
-def temperatura (ciudad):
+def send(msg):
+    message = msg.encode(FORMAT)
+    msg_length = len(message)
+    send_length = str(msg_length).encode(FORMAT)
+    send_length += b' ' * (HEADER - len(send_length))
+    client.send(send_length)
+    client.send(message)
 
-    conexion1 = mysql.connector.connect(host="localhost", user="root", passwd="", database="bd1") #cambiar por lo que sea
-    cursor1 = conexion1.cursor()
+
+def temperatura():
     
-    consulta = "SELECT temperatura FROM clima WHERE ciudad = %s"
-    ciudad_parametro = (ciudad,)
+    conexion = sqlite3.connect('Clima.db') 
+
+    cursor = conexion.cursor()
     
-    cursor1.execute(consulta, ciudad_parametro)
-    resultado = cursor1.fetchone()
+    consulta = "SELECT * FROM clima "
+    
+
+    cursor.execute(consulta)
+    resultado = cursor.fetchone()
 
     if resultado:
         temperatura = resultado[0]
     else:
         temperatura = None
 
-    conexion1.close()
+    conexion.close()
     return temperatura
-
 def handle_client(conn, addr):
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
     
@@ -45,7 +54,6 @@ def handle_client(conn, addr):
         if msg == FIN:
             connected = False
         else:
-            
             conn.send(temperatura(msg).encode(FORMAT))
     
     print(f"ADIOS. TE ESPERO EN OTRA OCASION [{addr}]")
@@ -54,21 +62,20 @@ def handle_client(conn, addr):
 def start():
     server.listen()
     print(f"[LISTENING] Servidor a la escucha en {SERVER}")
-    #CONEX_ACTIVAS = threading.active_count()-1
-    #print(CONEX_ACTIVAS)
+    CONEX_ACTIVAS = threading.active_count()-1
+    print(CONEX_ACTIVAS)
     while True:
         conn, addr = server.accept()
         CONEX_ACTIVAS = threading.active_count()
-        if (CONEX_ACTIVAS <= MAX_CONEXIONES): 
-            thread = threading.Thread(target=handle_client, args=(conn, addr))
-            thread.start()
-            print(f"[CONEXIONES ACTIVAS] {CONEX_ACTIVAS}")
-            print("CONEXIONES RESTANTES PARA CERRAR EL SERVICIO", MAX_CONEXIONES-CONEX_ACTIVAS)
-        else:
-            print("OOppsss... DEMASIADAS CONEXIONES. ESPERANDO A QUE ALGUIEN SE VAYA")
-            conn.send("OOppsss... DEMASIADAS CONEXIONES. Tendrás que esperar a que alguien se vaya".encode(FORMAT))
-            conn.close()
-            CONEX_ACTUALES = threading.active_count()-1
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(ADDR)
+        print (f"Establecida conexión en [{ADDR}]")
+       
+        thread = threading.Thread(target=handle_client, args=(conn, addr))
+        thread.start()
+            
+        
 
 # MAIN
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
