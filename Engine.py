@@ -52,24 +52,27 @@ AD_WEATHER_SERVER = "127.0.1.1"
 AD_WEATHER_PORT = 5052
 
 
-def connect_to_ad_weather():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ad_weather_socket:
-        ad_weather_socket.connect((AD_WEATHER_SERVER, AD_WEATHER_PORT))
-        print("Conectado al servidor AD_Weather.")
+# Esta función se ejecutará en un hilo separado para obtener la temperatura desde AD_Weather
+def get_temperature_from_ad_weather():
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ad_weather_socket:
+            ad_weather_socket.connect((AD_WEATHER_SERVER, AD_WEATHER_PORT))
+            print("Conectado al servidor AD_Weather.")
 
-        while True:
             # Envia una solicitud de temperatura
             ad_weather_socket.send(b"GET_TEMPERATURA")
             
             data = ad_weather_socket.recv(1024)
             if not data:
                 break
-            # Aquí puedes procesar los datos de temperatura recibidos desde AD_Weather
+
+            # Procesa y muestra la temperatura
             temperature = data.decode('utf-8')
             print(f"Temperatura actual: {temperature}°C")
+            break
 
-# Agrega un hilo para conectarse a AD_Weather
-ad_weather_thread = threading.Thread(target=connect_to_ad_weather)
+# Agrega un hilo para conectarse a AD_Weather y obtener la temperatura
+ad_weather_thread = threading.Thread(target=get_temperature_from_ad_weather)
 ad_weather_thread.daemon = True
 ad_weather_thread.start()
 
@@ -98,6 +101,16 @@ def autenticar_dron(conn, db_cursor):
         return False
 
 
+def send_message_to_kafka(topic, message):
+    producer = Producer(PRODUCER_CONFIG)
+    producer.produce(topic, key=None, value=message)
+    producer.flush()
+
+# Función para verificar si el mensaje se envió correctamente
+def check_message_delivery():
+    producer.flush()
+    print("Mensaje enviado a Kafka y verificado")
+
 def handle_client(conn, addr):
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
     # Crear una conexión de base de datos SQLite para este hilo
@@ -115,7 +128,7 @@ def handle_client(conn, addr):
         try:
             
             if not conectado:
-                print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
+                print(f"[CONEXIÓN CERRADA] fallo al autenticar, {addr} se ha desconectado.")
                 break
             
             msg2 = "Polla de negro"
@@ -138,23 +151,46 @@ def handle_client(conn, addr):
 def consume_messages():
     consumer.subscribe([KAFKA_TOPIC])
     
-    while True:
+    try:
         msg = consumer.poll(1.0)
-        
-        if msg is None:
-            continue
-        if msg.error():
-            if msg.error().code() == KafkaError._PARTITION_EOF:
-                continue
-            else:
-                print(f"Error al consumir mensaje: {msg.error()}")
-        
-        print(f"Mensaje recibido de Kafka: {msg.value()}")
+        print(msg.value())
+        if msg is not None and not msg.error():
+            return msg.value()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        consumer.close()
+    return None  # Retorna None si no se pudo consumir un mensaje
+
+
+def main_game_loop():
+    pygame.init()
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # Llama a display_map para mostrar el mapa actualizado
+        my_map.display_map()
+
+        my_map.update_drones([((1, 1), "Dron1"), ((2, 2), "Dron2")])
+        my_map.update_drones([((5, 7), "Dron6"), ((8, 8), "Dron4")])
+
+        # Actualiza la pantalla
+        pygame.display.flip()
+
+# Función para ejecutar el bucle del mapa en un hilo separado
+def game_loop_thread():
+    while True:
+        main_game_loop()
 
 def start():
 
-    pygame.init()
-
+    # Inicia el hilo para el bucle del mapa
+    game_thread = threading.Thread(target=game_loop_thread)
+    game_thread.daemon = True
+    game_thread.start()
     
 
     server.listen()
@@ -167,17 +203,22 @@ def start():
     kafka_thread.daemon = True
     kafka_thread.start()
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
 
-        # Llama a display_map para mostrar el mapa actualizado
-        my_map.display_map()
+    # Iniciar un hilo para verificar la entrega del mensaje
+    check_delivery_thread = threading.Thread(target=check_message_delivery)
+    check_delivery_thread.start()
+    
 
-        # Actualiza la pantalla
-        pygame.display.flip()
+    # Enviar un mensaje a Kafka
+    send_message_to_kafka(KAFKA_TOPIC, "Hola")
+
+    message = consume_messages()
+    if message is not None:
+        print(f"Mensaje consumido: {message}")
+    else:
+        print("No se pudo consumir un mensaje.")
+
+    print("no falla")
         
     while True:
         conn, addr = server.accept()
@@ -189,7 +230,7 @@ def start():
             print("CONEXIONES RESTANTES PARA CERRAR EL SERVICIO", MAX_CONEXIONES - CONEX_ACTIVAS)
         else:
             print("OOppsss... DEMASIADAS CONEXIONES. ESPERANDO A QUE ALGUIEN SE VAYA")
-            conn.send("OOppsss... DEMASIADAS CONEXEXIONES. Tendrás que esperar a que alguien se vaya".encode(FORMAT))
+            conn.send("OOppsss... DEMASIADAS CONEXIONES. Tendrás que esperar a que alguien se vaya".encode(FORMAT))
             try:
                 conn.close()
             except Exception as e:

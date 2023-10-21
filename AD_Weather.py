@@ -39,7 +39,7 @@ def handle_client(conn, addr):
 
         temp = temperatura()
 
-        conn.send(temp.encode(FORMAT))
+        conn.send(str(temp).encode(FORMAT))
 
     print(f"ADIOS. TE ESPERO EN OTRA OCASIÓN [{addr}]")
     conn.close()
