@@ -28,7 +28,7 @@ CONSUMER_CONFIG = {
     'auto.offset.reset': 'earliest'
 }
 producer = Producer(PRODUCER_CONFIG)
-consumer = Consumer(CONSUMER_CONFIG)
+#consumer = Consumer(CONSUMER_CONFIG)
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
@@ -149,18 +149,27 @@ def handle_client(conn, addr):
         print(f"Error al cerrar la conexión: {e}")
 
 def consume_messages():
+    consumer = Consumer(CONSUMER_CONFIG)
     consumer.subscribe([KAFKA_TOPIC])
-    
+
     try:
-        msg = consumer.poll(1.0)
-        print(msg.value())
-        if msg is not None and not msg.error():
-            return msg.value()
+        while True:
+            msg = consumer.poll(1.0)  # Espera un máximo de 1 segundo por mensajes
+            if msg is None:
+                continue
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    print(f"Error al consumir mensaje: {msg.error()}")
+                    break
+            payload = msg.value().decode('utf-8')
+            print(f"Posición del dron recibida: {payload}")
+
     except KeyboardInterrupt:
         pass
     finally:
         consumer.close()
-    return None  # Retorna None si no se pudo consumir un mensaje
 
 
 def main_game_loop():
@@ -207,18 +216,7 @@ def start():
     # Iniciar un hilo para verificar la entrega del mensaje
     check_delivery_thread = threading.Thread(target=check_message_delivery)
     check_delivery_thread.start()
-    
 
-    # Enviar un mensaje a Kafka
-    send_message_to_kafka(KAFKA_TOPIC, "Hola")
-
-    message = consume_messages()
-    if message is not None:
-        print(f"Mensaje consumido: {message}")
-    else:
-        print("No se pudo consumir un mensaje.")
-
-    print("no falla")
         
     while True:
         conn, addr = server.accept()
