@@ -6,7 +6,14 @@ import secrets
 import string
 import sqlite3
 import argparse
+import pygame
 from confluent_kafka import Producer, Consumer, KafkaError
+from map import Map
+
+screen_width = 800
+screen_height = 600
+screen = pygame.display.set_mode((screen_width, screen_height))
+my_map = Map(screen)
 
 KAFKA_BROKER = "127.0.0.1:9092"
 KAFKA_TOPIC = "drones"
@@ -40,6 +47,33 @@ ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 FIN = "FIN"
 
+# Configura la dirección y el puerto del servidor AD_Weather
+AD_WEATHER_SERVER = "127.0.1.1"
+AD_WEATHER_PORT = 5052
+
+
+def connect_to_ad_weather():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ad_weather_socket:
+        ad_weather_socket.connect((AD_WEATHER_SERVER, AD_WEATHER_PORT))
+        print("Conectado al servidor AD_Weather.")
+
+        while True:
+            # Envia una solicitud de temperatura
+            ad_weather_socket.send(b"GET_TEMPERATURA")
+            
+            data = ad_weather_socket.recv(1024)
+            if not data:
+                break
+            # Aquí puedes procesar los datos de temperatura recibidos desde AD_Weather
+            temperature = data.decode('utf-8')
+            print(f"Temperatura actual: {temperature}°C")
+
+# Agrega un hilo para conectarse a AD_Weather
+ad_weather_thread = threading.Thread(target=connect_to_ad_weather)
+ad_weather_thread.daemon = True
+ad_weather_thread.start()
+
+
 def autenticar_dron(conn, db_cursor):
     msg = conn.recv(HEADER).decode(FORMAT)
     print(msg)
@@ -69,6 +103,7 @@ def handle_client(conn, addr):
     # Crear una conexión de base de datos SQLite para este hilo
     db_connection = sqlite3.connect('Registro.db')
     db_cursor = db_connection.cursor()
+    
     
     # Autenticar al dron
     conn.send("Id de autenticacion: ".encode(FORMAT))
@@ -117,6 +152,11 @@ def consume_messages():
         print(f"Mensaje recibido de Kafka: {msg.value()}")
 
 def start():
+
+    pygame.init()
+
+    
+
     server.listen()
     print(f"[LISTENING] Servidor a la escucha en {SERVER} con puerto {PORT}")
     CONEX_ACTIVAS = threading.active_count() - 1
@@ -126,7 +166,19 @@ def start():
     kafka_thread = threading.Thread(target=consume_messages)
     kafka_thread.daemon = True
     kafka_thread.start()
-    
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # Llama a display_map para mostrar el mapa actualizado
+        my_map.display_map()
+
+        # Actualiza la pantalla
+        pygame.display.flip()
+        
     while True:
         conn, addr = server.accept()
         CONEX_ACTIVAS = threading.active_count()
