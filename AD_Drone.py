@@ -20,27 +20,31 @@ def send(msg, client_socket):
     client_socket.send(send_length)
     client_socket.send(message)
 
-if len(sys.argv) != 5:
-    print("Oops!. Parece que algo falló. Necesito estos argumentos: <ServerIP> <Puerto>")
-    sys.exit()
+# if len(sys.argv) != 7:
+#     print("Oops!. Parece que algo falló. Necesito estos argumentos: <ServerIP> <Puerto>")
+#     sys.exit()
 
 SERVERENG = sys.argv[1]
 ADDRENG = (SERVERENG, PORTENGINE)
 SERVERBOOT=sys.argv[2]
 ADDRBOOT=(SERVERBOOT,PORTBOOT)
-ID= sys.argv[3]
-coor=sys.argv[4]
-#=sys.argv[]
+SERVERREG=sys.argv[3]
+ADDREG=(SERVERREG,PORTREG)
+ID= sys.argv[4]
+coor=sys.argv[5]
 
-if PORT == 5050:
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect(ADDR)
-    print(f"Establecida conexión en {ADDR}")
+#=sys.argv[]
 
     # Función para registrar un dron
 def registrar_dron():
     print("Registrando un dron...")
     # Aquí puedes agregar tu lógica para registrar un dron
+    while True:
+        send(str(ID), client)
+        respuesta = client.recv(HEADER).decode(FORMAT)
+        TOKEN = respuesta
+
+        print(f"Respuesta del servidor: {TOKEN}")
     print("Dron registrado con éxito!")
 
 # Función para editar el perfil del dron
@@ -64,7 +68,6 @@ while True:
     opcion = input("Elija una opción: ")
 
     if opcion == "1":
-        registrar_dron()
         # Submenú para opciones relacionadas con el dron
         while True:
             print("\nSubmenú del Dron:")
@@ -73,8 +76,11 @@ while True:
             print("3. Darse de baja")
             print("4. Volver al menú principal")
             sub_opcion = input("Elija una opción: ")
-
             if sub_opcion == "1":
+                print(f"UWU")
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client.connect(ADDREG)
+                print(f"Establecida conexión en {ADDREG}")
                 registrar_dron()
             elif sub_opcion == "2":
                 editar_perfil()
@@ -91,19 +97,13 @@ while True:
 
     elif opcion == "3":
         print("Saliendo del programa. ¡Hasta luego!")
+        print("SE ACABO LO QUE SE DABA")
+        client.close()
         break
 
     else:
         print("Opción no válida. Por favor, elija una opción válida.")
-
-
-
-    while True:
-        send(str(ID), client)
-        respuesta = client.recv(HEADER).decode(FORMAT)
-        TOKEN = respuesta
-
-        print(f"Respuesta del servidor: {TOKEN}")
+    
 
     print("SE ACABO LO QUE SE DABA")
     client.close()
