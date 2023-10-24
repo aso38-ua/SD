@@ -35,15 +35,15 @@ ID= sys.argv[4]
 
 #=sys.argv[]
 def gestionarMovimientos():
-    rint("jejeje")
+    print("jejeje")
 
 
     # Función para registrar un dron
 def registrar_dron(opcion):
     print("Registrando un dron...")
     send(str(opcion),client)
-    respuestita=client.recv(HEADER).decode(FORMAT)#Era para saber si se habia enviado bn la opcion
-    print(f"Esta es la respuesta: {respuestita}")
+    # respuestita=client.recv(HEADER).decode(FORMAT)#Era para saber si se habia enviado bn la opcion
+    # print(f"Esta es la respuesta: {respuestita}")
     # Aquí puedes agregar tu lógica para registrar un dron
     send(str(ID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
@@ -57,8 +57,8 @@ def editar_perfil():
     # Aquí puedes agregar tu lógica para editar el perfil
     print("Registrando un dron...")
     send(str(opcion),client)
-    respuestita=client.recv(HEADER).decode(FORMAT)
-    print(f"Esta es la respuesta: {respuestita}")
+    # respuestita=client.recv(HEADER).decode(FORMAT)
+    # print(f"Esta es la respuesta: {respuestita}")
     # Aquí puedes agregar tu lógica para registrar un dron
     send(str(ID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
@@ -74,8 +74,8 @@ def darse_de_baja():
     # Aquí puedes agregar tu lógica para darte de baja
     print("Registrando un dron...")
     send(str(opcion),client)
-    respuestita=client.recv(HEADER).decode(FORMAT)
-    print(f"Esta es la respuesta: {respuestita}")
+    # respuestita=client.recv(HEADER).decode(FORMAT)
+    # print(f"Esta es la respuesta: {respuestita}")
     # Aquí puedes agregar tu lógica para registrar un dron
     send(str(ID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
