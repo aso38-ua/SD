@@ -5,8 +5,8 @@ ID = 0 #Por defecto
 TOKEN = ""
 
 HEADER = 64
-PORTENGINE = 5050
-PORTREG = 5051
+PORTENGINE = 5051
+PORTREG = 5050
 PORTBOOT=9092
 IPBOOT="127.0.0.1"
 
@@ -31,32 +31,58 @@ ADDRBOOT=(SERVERBOOT,PORTBOOT)
 SERVERREG=sys.argv[3]
 ADDREG=(SERVERREG,PORTREG)
 ID= sys.argv[4]
-coor=sys.argv[5]
+#coor=sys.argv[5]
 
 #=sys.argv[]
+def gestionarMovimientos():
+    rint("jejeje")
+
 
     # Función para registrar un dron
-def registrar_dron():
+def registrar_dron(opcion):
     print("Registrando un dron...")
+    send(str(opcion),client)
+    respuestita=client.recv(HEADER).decode(FORMAT)#Era para saber si se habia enviado bn la opcion
+    print(f"Esta es la respuesta: {respuestita}")
     # Aquí puedes agregar tu lógica para registrar un dron
-    while True:
-        send(str(ID), client)
-        respuesta = client.recv(HEADER).decode(FORMAT)
-        TOKEN = respuesta
-
-        print(f"Respuesta del servidor: {TOKEN}")
+    send(str(ID), client)
+    respuesta = client.recv(HEADER).decode(FORMAT)
+    TOKEN = respuesta
+    print(f"Respuesta del servidor: {TOKEN}")
     print("Dron registrado con éxito!")
 
 # Función para editar el perfil del dron
 def editar_perfil():
     print("Editando el perfil del dron...")
     # Aquí puedes agregar tu lógica para editar el perfil
+    print("Registrando un dron...")
+    send(str(opcion),client)
+    respuestita=client.recv(HEADER).decode(FORMAT)
+    print(f"Esta es la respuesta: {respuestita}")
+    # Aquí puedes agregar tu lógica para registrar un dron
+    send(str(ID), client)
+    respuesta = client.recv(HEADER).decode(FORMAT)
+    TOKEN = respuesta
+    print(f"Respuesta del servidor: {TOKEN}")
+    print("Dron registrado con éxito!")
+
     print("Perfil editado con éxito!")
 
 # Función para darse de baja
 def darse_de_baja():
     print("Dándose de baja...")
     # Aquí puedes agregar tu lógica para darte de baja
+    print("Registrando un dron...")
+    send(str(opcion),client)
+    respuestita=client.recv(HEADER).decode(FORMAT)
+    print(f"Esta es la respuesta: {respuestita}")
+    # Aquí puedes agregar tu lógica para registrar un dron
+    send(str(ID), client)
+    respuesta = client.recv(HEADER).decode(FORMAT)
+    TOKEN = respuesta
+    print(f"Respuesta del servidor: {TOKEN}")
+    print("Dron registrado con éxito!")
+
     print("Dado de baja con éxito!")
 
 # Menú principal
@@ -81,11 +107,18 @@ while True:
                 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 client.connect(ADDREG)
                 print(f"Establecida conexión en {ADDREG}")
-                registrar_dron()
+                registrar_dron(sub_opcion)
+                break
             elif sub_opcion == "2":
-                editar_perfil()
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client.connect(ADDREG)
+                print(f"Establecida conexión en {ADDREG}")
+                editar_perfil(sub_opcion)
             elif sub_opcion == "3":
-                darse_de_baja()
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client.connect(ADDREG)
+                print(f"Establecida conexión en {ADDREG}")
+                darse_de_baja(sub_opcion)
             elif sub_opcion=="4":
                 break
             else:
@@ -93,7 +126,9 @@ while True:
 
     elif opcion == "2":
         print("Unirse al espectáculo...")
-        # Aquí puedes agregar la lógica para unirse al espectáculo
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(ADDRENG)
+        print(f"Establecida conexión en {ADDRENG}")
 
     elif opcion == "3":
         print("Saliendo del programa. ¡Hasta luego!")
@@ -105,6 +140,5 @@ while True:
         print("Opción no válida. Por favor, elija una opción válida.")
     
 
-    print("SE ACABO LO QUE SE DABA")
-    client.close()
+client.close()
 #elif (PORT==5051):
