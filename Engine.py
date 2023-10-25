@@ -6,7 +6,14 @@ import secrets
 import string
 import sqlite3
 import argparse
+import pygame
 from confluent_kafka import Producer, Consumer, KafkaError
+from map import Map
+
+screen_width = 800
+screen_height = 600
+screen = pygame.display.set_mode((screen_width, screen_height))
+my_map = Map(screen)
 
 KAFKA_BROKER = "127.0.0.1:9092"
 KAFKA_TOPIC = "drones"
@@ -21,7 +28,7 @@ CONSUMER_CONFIG = {
     'auto.offset.reset': 'earliest'
 }
 producer = Producer(PRODUCER_CONFIG)
-consumer = Consumer(CONSUMER_CONFIG)
+#consumer = Consumer(CONSUMER_CONFIG)
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
@@ -39,6 +46,36 @@ SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 FIN = "FIN"
+
+# Configura la dirección y el puerto del servidor AD_Weather
+AD_WEATHER_SERVER = "127.0.1.1"
+AD_WEATHER_PORT = 5052
+
+
+# Esta función se ejecutará en un hilo separado para obtener la temperatura desde AD_Weather
+def get_temperature_from_ad_weather():
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ad_weather_socket:
+            ad_weather_socket.connect((AD_WEATHER_SERVER, AD_WEATHER_PORT))
+            print("Conectado al servidor AD_Weather.")
+
+            # Envia una solicitud de temperatura
+            ad_weather_socket.send(b"GET_TEMPERATURA")
+            
+            data = ad_weather_socket.recv(1024)
+            if not data:
+                break
+
+            # Procesa y muestra la temperatura
+            temperature = data.decode('utf-8')
+            print(f"Temperatura actual: {temperature}°C")
+            break
+
+# Agrega un hilo para conectarse a AD_Weather y obtener la temperatura
+ad_weather_thread = threading.Thread(target=get_temperature_from_ad_weather)
+ad_weather_thread.daemon = True
+ad_weather_thread.start()
+
 
 def autenticar_dron(conn, db_cursor):
     msg = conn.recv(HEADER).decode(FORMAT)
@@ -64,11 +101,22 @@ def autenticar_dron(conn, db_cursor):
         return False
 
 
+def send_message_to_kafka(topic, message):
+    producer = Producer(PRODUCER_CONFIG)
+    producer.produce(topic, key=None, value=message)
+    producer.flush()
+
+# Función para verificar si el mensaje se envió correctamente
+def check_message_delivery():
+    producer.flush()
+    print("Mensaje enviado a Kafka y verificado")
+
 def handle_client(conn, addr):
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
     # Crear una conexión de base de datos SQLite para este hilo
     db_connection = sqlite3.connect('Registro.db')
     db_cursor = db_connection.cursor()
+    
     
     # Autenticar al dron
     conn.send("Id de autenticacion: ".encode(FORMAT))
@@ -80,7 +128,7 @@ def handle_client(conn, addr):
         try:
             
             if not conectado:
-                print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
+                print(f"[CONEXIÓN CERRADA] fallo al autenticar, {addr} se ha desconectado.")
                 break
             
             msg2 = "Polla de negro"
@@ -101,22 +149,59 @@ def handle_client(conn, addr):
         print(f"Error al cerrar la conexión: {e}")
 
 def consume_messages():
+    consumer = Consumer(CONSUMER_CONFIG)
     consumer.subscribe([KAFKA_TOPIC])
-    
-    while True:
-        msg = consumer.poll(1.0)
-        
-        if msg is None:
-            continue
-        if msg.error():
-            if msg.error().code() == KafkaError._PARTITION_EOF:
+
+    try:
+        while True:
+            msg = consumer.poll(1.0)  # Espera un máximo de 1 segundo por mensajes
+            if msg is None:
                 continue
-            else:
-                print(f"Error al consumir mensaje: {msg.error()}")
-        
-        print(f"Mensaje recibido de Kafka: {msg.value()}")
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    print(f"Error al consumir mensaje: {msg.error()}")
+                    break
+            payload = msg.value().decode('utf-8')
+            print(f"Posición del dron recibida: {payload}")
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        consumer.close()
+
+
+def main_game_loop():
+    pygame.init()
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # Llama a display_map para mostrar el mapa actualizado
+        my_map.display_map()
+
+        my_map.update_drones([((1, 1), "Dron1"), ((2, 2), "Dron2")])
+        my_map.update_drones([((5, 7), "Dron6"), ((8, 8), "Dron4")])
+
+        # Actualiza la pantalla
+        pygame.display.flip()
+
+# Función para ejecutar el bucle del mapa en un hilo separado
+def game_loop_thread():
+    while True:
+        main_game_loop()
 
 def start():
+
+    # Inicia el hilo para el bucle del mapa
+    game_thread = threading.Thread(target=game_loop_thread)
+    game_thread.daemon = True
+    game_thread.start()
+    
+
     server.listen()
     print(f"[LISTENING] Servidor a la escucha en {SERVER} con puerto {PORT}")
     CONEX_ACTIVAS = threading.active_count() - 1
@@ -126,7 +211,13 @@ def start():
     kafka_thread = threading.Thread(target=consume_messages)
     kafka_thread.daemon = True
     kafka_thread.start()
-    
+
+
+    # Iniciar un hilo para verificar la entrega del mensaje
+    check_delivery_thread = threading.Thread(target=check_message_delivery)
+    check_delivery_thread.start()
+
+        
     while True:
         conn, addr = server.accept()
         CONEX_ACTIVAS = threading.active_count()
@@ -137,7 +228,7 @@ def start():
             print("CONEXIONES RESTANTES PARA CERRAR EL SERVICIO", MAX_CONEXIONES - CONEX_ACTIVAS)
         else:
             print("OOppsss... DEMASIADAS CONEXIONES. ESPERANDO A QUE ALGUIEN SE VAYA")
-            conn.send("OOppsss... DEMASIADAS CONEXEXIONES. Tendrás que esperar a que alguien se vaya".encode(FORMAT))
+            conn.send("OOppsss... DEMASIADAS CONEXIONES. Tendrás que esperar a que alguien se vaya".encode(FORMAT))
             try:
                 conn.close()
             except Exception as e:

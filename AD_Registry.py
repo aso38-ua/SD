@@ -35,26 +35,39 @@ def handle_client(conn, addr):
     
     connected = True
     while connected:
-        msg_length = conn.recv(HEADER).decode(FORMAT)
-        if not msg_length:
-            print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
+        try:
+            msg_length = conn.recv(HEADER).decode(FORMAT)
+            if msg_length == 'q':
+                print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
+                break
+            msg_length = int(msg_length)
+            msg = conn.recv(msg_length).decode(FORMAT)
+            
+            if msg_length == 1:
+                # Opción 1: Registro de dron
+                if id_existe(msg, db_cursor):
+                    respuesta = "El id ya existe"
+                    conn.send(respuesta.encode(FORMAT))
+                else:
+                    token = generar_token(longitud_token)
+                    print("Token de acceso es: ", token)
+                    
+                    # Insertar los datos en la base de datos
+                    db_cursor.execute("INSERT INTO Dron (token, id) VALUES (?, ?)", (token, msg))
+                    db_connection.commit()
+                    
+                    conn.send(token.encode(FORMAT))
+            elif msg_length == 2:
+                # Opción 2: Otra acción
+                # Aquí puedes implementar la lógica para la opción 2
+                pass
+            else:
+                # Opción desconocida
+                conn.send("Opción desconocida".encode(FORMAT))
+        except Exception as e:
+            print(f"Error al procesar el mensaje: {e}")
             break
-        msg_length = int(msg_length)
-        msg = conn.recv(msg_length).decode(FORMAT)
-        
-        if id_existe(msg, db_cursor):
-            respuesta = "El id ya existe"
-            conn.send(respuesta.encode(FORMAT))
-        else:
-            token = generar_token(longitud_token)
-            print("Token de acceso es: ", token)
-            
-            # Insertar los datos en la base de datos
-            db_cursor.execute("INSERT INTO Dron (token, id) VALUES (?, ?)", (token, msg))
-            db_connection.commit()
-            
-            conn.send(token.encode(FORMAT))
-    
+
     print(f"ADIOS. TE ESPERO EN OTRA OCASION [{addr}]")
     conn.close()
     db_cursor.close()
