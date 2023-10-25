@@ -1,6 +1,7 @@
 import sys
 import socket
 from map import Map
+import sqlite3
 
 ID = 0 #Por defecto
 TOKEN = ""
@@ -47,6 +48,24 @@ def registrar_dron(opcion):
     send(str(ID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
     TOKEN = respuesta
+
+    conexion = sqlite3.connect('mi_basede_datos.db')
+
+    # Crear un cursor
+    cursor = conexion.cursor()
+
+    # Datos del nuevo registro
+    nuevo_id = ID  # Reemplaza 1 con el ID que desees insertar
+    nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
+
+    # Insertar el nuevo registro en la tabla "drone"
+    cursor.execute("INSERT INTO drone (id, token) VALUES (?, ?)", (nuevo_id, nuevo_token))
+
+    # Guardar los cambios en la base de datos
+    conexion.commit()
+
+    # Cerrar la conexión
+    conexion.close()
     print(f"Respuesta del servidor: {TOKEN}")
     print("Dron registrado con éxito!")
 
@@ -78,8 +97,8 @@ def darse_de_baja(opcion):
 # Menú principal
 
 #Aqui me tiene que pasar alberto algo para que el dron deje de funcionar por la temperatura
-
 while True:
+
     print("Menú Principal:")
     print("1. Registrar dron")
     print("2. Unirse al espectáculo")
@@ -121,13 +140,18 @@ while True:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect(ADDRENG)
 
+        send(TOKEN,client)
+        coor = client.recv(HEADER).decode(FORMAT)#recibo coor final
+
+        #Si un dron falla o su aplicación se bloquea por cualquier causa es eliminado visualmente de la acción
+                 
 
         #Autentificar el token
             #Envio token
             #ESpero respuesta
         #Quedo en espera de que el engine me mande instrucciones
 
-
+        #hay que hacer un hilo
         opcion = input("Desea mostrar el mapa?(s/n)")
         if(opcion=="s" or opcion =="S"):
             print(f"mostrar el mapa")
