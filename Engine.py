@@ -84,7 +84,7 @@ def autenticar_dron(conn, db_cursor):
     # El mensaje enviado debe ser la ID de autenticación
     
     # Consultar la base de datos para verificar si la ID de autenticación es válida
-    db_cursor.execute("SELECT Id FROM Dron WHERE Id=?", (msg,))
+    db_cursor.execute("SELECT Token FROM Dron WHERE Token=?", (msg,))
     resultado = db_cursor.fetchone()
     
     print(resultado)
@@ -119,7 +119,7 @@ def handle_client(conn, addr):
     
     
     # Autenticar al dron
-    conn.send("Id de autenticacion: ".encode(FORMAT))
+    conn.send("Token de autenticacion: ".encode(FORMAT))
     conn.recv(2048).decode(FORMAT)
     conectado=autenticar_dron(conn, db_cursor)
     
