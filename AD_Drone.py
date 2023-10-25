@@ -1,5 +1,6 @@
 import sys
 import socket
+from map import Map
 
 ID = 0 #Por defecto
 TOKEN = ""
@@ -42,9 +43,7 @@ def gestionarMovimientos():
 def registrar_dron(opcion):
     print("Registrando un dron...")
     send(str(opcion),client)
-    # respuestita=client.recv(HEADER).decode(FORMAT)#Era para saber si se habia enviado bn la opcion
-    # print(f"Esta es la respuesta: {respuestita}")
-    # Aquí puedes agregar tu lógica para registrar un dron
+   
     send(str(ID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
     TOKEN = respuesta
@@ -52,40 +51,34 @@ def registrar_dron(opcion):
     print("Dron registrado con éxito!")
 
 # Función para editar el perfil del dron
-def editar_perfil():
+def editar_perfil(opcion,newID):
     print("Editando el perfil del dron...")
     # Aquí puedes agregar tu lógica para editar el perfil
     print("Registrando un dron...")
     send(str(opcion),client)
-    # respuestita=client.recv(HEADER).decode(FORMAT)
-    # print(f"Esta es la respuesta: {respuestita}")
-    # Aquí puedes agregar tu lógica para registrar un dron
+    
     send(str(ID), client)
+    send(str(newID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
-    TOKEN = respuesta
-    print(f"Respuesta del servidor: {TOKEN}")
-    print("Dron registrado con éxito!")
-
+    
+    print(f"Respuesta del servidor: {respuesta}")
     print("Perfil editado con éxito!")
 
 # Función para darse de baja
-def darse_de_baja():
+def darse_de_baja(opcion):
     print("Dándose de baja...")
     # Aquí puedes agregar tu lógica para darte de baja
     print("Registrando un dron...")
     send(str(opcion),client)
-    # respuestita=client.recv(HEADER).decode(FORMAT)
-    # print(f"Esta es la respuesta: {respuestita}")
-    # Aquí puedes agregar tu lógica para registrar un dron
     send(str(ID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
-    TOKEN = respuesta
-    print(f"Respuesta del servidor: {TOKEN}")
-    print("Dron registrado con éxito!")
-
+    print(f"Respuesta del servidor: {respuesta}")
     print("Dado de baja con éxito!")
 
 # Menú principal
+
+#Aqui me tiene que pasar alberto algo para que el dron deje de funcionar por la temperatura
+
 while True:
     print("Menú Principal:")
     print("1. Registrar dron")
@@ -94,6 +87,9 @@ while True:
     opcion = input("Elija una opción: ")
 
     if opcion == "1":
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(ADDREG)
+        print(f"Establecida conexión en {ADDREG}")
         # Submenú para opciones relacionadas con el dron
         while True:
             print("\nSubmenú del Dron:")
@@ -104,19 +100,15 @@ while True:
             sub_opcion = input("Elija una opción: ")
             if sub_opcion == "1":
                 print(f"UWU")
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.connect(ADDREG)
-                print(f"Establecida conexión en {ADDREG}")
+                
                 registrar_dron(sub_opcion)
                 break
             elif sub_opcion == "2":
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.connect(ADDREG)
-                print(f"Establecida conexión en {ADDREG}")
-                editar_perfil(sub_opcion)
+                
+                resp=input("Cual es el nuevo id que quieres?")
+                editar_perfil(sub_opcion,resp)
             elif sub_opcion == "3":
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.connect(ADDREG)
+                
                 print(f"Establecida conexión en {ADDREG}")
                 darse_de_baja(sub_opcion)
             elif sub_opcion=="4":
@@ -128,6 +120,27 @@ while True:
         print("Unirse al espectáculo...")
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect(ADDRENG)
+
+
+        #Autentificar el token
+            #Envio token
+            #ESpero respuesta
+        #Quedo en espera de que el engine me mande instrucciones
+
+
+        opcion = input("Desea mostrar el mapa?(s/n)")
+        if(opcion=="s" or opcion =="S"):
+            print(f"mostrar el mapa")
+
+        elif(opcion =="n" or opcion=="N"):
+            print(f"no mostrar el mapa")
+
+        else:
+            print(f"opcion incorrecta")
+        
+
+
+
         print(f"Establecida conexión en {ADDRENG}")
 
     elif opcion == "3":
