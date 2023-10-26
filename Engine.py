@@ -28,7 +28,10 @@ CONSUMER_CONFIG = {
     'auto.offset.reset': 'earliest'
 }
 producer = Producer(PRODUCER_CONFIG)
-#consumer = Consumer(CONSUMER_CONFIG)
+consumer = Consumer(CONSUMER_CONFIG)
+
+# Diccionario para mantener las posiciones de los drones
+drone_positions = {}
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
@@ -154,7 +157,7 @@ def consume_messages():
 
     try:
         while True:
-            msg = consumer.poll(1.0)  # Espera un máximo de 1 segundo por mensajes
+            msg = consumer.poll(1.0)
             if msg is None:
                 continue
             if msg.error():
@@ -164,8 +167,14 @@ def consume_messages():
                     print(f"Error al consumir mensaje: {msg.error()}")
                     break
             payload = msg.value().decode('utf-8')
-            print(f"Posición del dron recibida: {payload}")
-
+            
+            # Parsea la posición del dron desde el mensaje
+            try:
+                drone_name, x, y = payload.split(',')
+                drone_positions[drone_name] = (int(x), int(y))
+                print(f"Posición de {drone_name}: ({x}, {y})")
+            except ValueError:
+                print(f"Error al analizar la posición del dron: {payload}")
     except KeyboardInterrupt:
         pass
     finally:
@@ -180,11 +189,8 @@ def main_game_loop():
             if event.type == pygame.QUIT:
                 running = False
 
-        # Llama a display_map para mostrar el mapa actualizado
-        my_map.display_map()
-
-        my_map.update_drones([((1, 1), "Dron1"), ((2, 2), "Dron2")])
-        my_map.update_drones([((5, 7), "Dron6"), ((8, 8), "Dron4")])
+        # Actualiza el mapa con las posiciones de los drones
+        my_map.update_drones(drone_positions.items())
 
         # Actualiza la pantalla
         pygame.display.flip()
@@ -211,11 +217,6 @@ def start():
     kafka_thread = threading.Thread(target=consume_messages)
     kafka_thread.daemon = True
     kafka_thread.start()
-
-
-    # Iniciar un hilo para verificar la entrega del mensaje
-    check_delivery_thread = threading.Thread(target=check_message_delivery)
-    check_delivery_thread.start()
 
         
     while True:

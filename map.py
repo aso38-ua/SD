@@ -53,9 +53,36 @@ class Map:
 
 
     def update_drones(self, drone_data):
-        # Actualiza el diccionario de drones con las nuevas posiciones y sus IDs
+        # Crea una copia de la matriz actual para mantener el estado anterior del mapa
+        previous_map = np.copy(self.matriz)
+
+        # Limpia el mapa anterior, eliminando todas las posiciones de drones
+        self.matriz = np.zeros((self.tam, self.tam), dtype=int)
+
+        # Actualiza el mapa con las nuevas posiciones de los drones
         for position, drone_id in drone_data:
-            self.drones[position] = drone_id  # Marca la posición del dron como ocupada y asocia su ID
+            x, y = position
+            if 0 <= x < self.tam and 0 <= y < self.tam:
+                self.matriz[x, y] = 1
+                self.drones[position] = drone_id
+
+        # Compara el mapa actual con el mapa anterior para detectar cambios
+        changes = np.where(self.matriz != previous_map)
+
+        # Vuelve a dibujar solo las celdas que han cambiado
+        for x, y in zip(*changes):
+            # Dibuja el cuadro verde para representar el dron
+            fill_color = (0, 255, 0)
+            pygame.draw.rect(self.screen, fill_color, (y * 40 + 1, x * 40 + 1, 38, 38))
+
+            # Dibuja el ID del dron en la casilla
+            font = pygame.font.Font(None, 18)
+            drone_id = self.drones[(x, y)]
+            text = font.render(drone_id, True, (0, 0, 0))
+            text_rect = text.get_rect()
+            text_rect.center = (y * 40 + 20, x * 40 + 20)
+            self.screen.blit(text, text_rect)
+
 
 
     def clear_drones(self):
@@ -76,7 +103,7 @@ if __name__ == "__main__":
                 running = False
 
         # Ejemplo de cómo actualizar las posiciones de los drones
-        drone_positions = [(1, 1), (3, 3), (5, 5)]
+        drone_positions = [((1, 1), "Dron1"), ((3, 3), "Dron2"), ((5, 5), "Dron3")]
         my_map.clear_drones()  # Borra las posiciones anteriores
         my_map.update_drones(drone_positions)  # Actualiza las nuevas posiciones
         my_map.display_map()
