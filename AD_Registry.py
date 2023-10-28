@@ -41,7 +41,7 @@ def handle_client(conn, addr):
                 print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
                 break
             msg_length = int(msg_length)
-            msg = conn.recv(msg_length).decode(FORMAT)
+            msg = conn.recv(2048).decode(FORMAT)
             
             if msg_length == 1:
                 # Opción 1: Registro de dron

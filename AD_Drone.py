@@ -2,6 +2,7 @@ import sys
 import socket
 from map import Map
 import sqlite3
+import argparse
 
 ID = 0 #Por defecto
 TOKEN = ""
@@ -26,13 +27,30 @@ def send(msg, client_socket):
 #     print("Oops!. Parece que algo falló. Necesito estos argumentos: <ServerIP> <Puerto>")
 #     sys.exit()
 
-SERVERENG = sys.argv[1]
+def id_existe(id, db_cursor):
+    # Comprueba si el ID ya existe en la base de datos
+    db_cursor.execute("SELECT id FROM drone WHERE id=?", (id,))
+    existe = db_cursor.fetchone()
+    return existe is not None
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
+    parser.add_argument("--Engine", type=str, default="127.0.1.1", help="Puerto de escucha")
+    parser.add_argument("--Id", type=str, help="Id del dron")
+    parser.add_argument("--kafka", type=str,default="127.0.0.1", help="Dirección IP del servidor Kafka")
+    parser.add_argument("--Registry", type=str, default="127.0.1.1", help="Puerto de escucha")
+
+    return parser.parse_args()
+
+args = parse_arguments()
+
+SERVERENG = args.Engine
 ADDRENG = (SERVERENG, PORTENGINE)
-SERVERBOOT=sys.argv[2]
+SERVERBOOT=args.kafka
 ADDRBOOT=(SERVERBOOT,PORTBOOT)
-SERVERREG=sys.argv[3]
+SERVERREG=args.Registry
 ADDREG=(SERVERREG,PORTREG)
-ID= sys.argv[4]
+ID= args.Id
 #coor=sys.argv[5]
 
 #=sys.argv[]
@@ -43,43 +61,52 @@ def gestionarMovimientos():
     # Función para registrar un dron
 def registrar_dron(opcion):
     print("Registrando un dron...")
-    send(str(opcion),client)
+    send(opcion,client)
+    print(ID)
    
     send(str(ID), client)
-    respuesta = client.recv(HEADER).decode(FORMAT)
-    TOKEN = respuesta
+    respuesta = client.recv(2048).decode(FORMAT)
 
-    conexion = sqlite3.connect('mi_basede_datos.db')
+    if respuesta:
+        TOKEN = respuesta
 
-    # Crear un cursor
-    cursor = conexion.cursor()
+        conexion = sqlite3.connect('drone.db')
 
-    # Datos del nuevo registro
-    nuevo_id = ID  # Reemplaza 1 con el ID que desees insertar
-    nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
+        # Crear un cursor
+        cursor = conexion.cursor()
 
-    # Insertar el nuevo registro en la tabla "drone"
-    cursor.execute("INSERT INTO drone (id, token) VALUES (?, ?)", (nuevo_id, nuevo_token))
+        nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
 
-    # Guardar los cambios en la base de datos
-    conexion.commit()
+        # Insertar el nuevo registro en la tabla "drone"
+        if id_existe(ID,cursor) == False:
+            cursor.execute("INSERT INTO drone (id, token) VALUES (?, ?)", (ID, nuevo_token))
 
-    # Cerrar la conexión
-    conexion.close()
-    print(f"Respuesta del servidor: {TOKEN}")
-    print("Dron registrado con éxito!")
+            # Guardar los cambios en la base de datos
+            conexion.commit()
+
+            # Cerrar la conexión
+            conexion.close()
+            print(f"Respuesta del servidor: {TOKEN}")
+            print("Dron registrado con éxito!")
+
+        else:
+            print("Ya existe el ID")
+            conexion.close()
+
+    else:
+        print("No se pudo registrar el dron.")
 
 # Función para editar el perfil del dron
 def editar_perfil(opcion,newID):
     print("Editando el perfil del dron...")
     # Aquí puedes agregar tu lógica para editar el perfil
-    print("Registrando un dron...")
+
     send(str(opcion),client)
     
     send(str(ID), client)
     send(str(newID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
-    
+
     print(f"Respuesta del servidor: {respuesta}")
     print("Perfil editado con éxito!")
 
@@ -140,6 +167,16 @@ while True:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect(ADDRENG)
 
+        opcion = input("Desea mostrar el mapa?(s/n)")
+        if(opcion=="s" or opcion =="S"):
+            print(f"mostrar el mapa")
+
+        elif(opcion =="n" or opcion=="N"):
+            print(f"no mostrar el mapa")
+
+        else:
+            print(f"opcion incorrecta")
+
         send(TOKEN,client)
         coor = client.recv(HEADER).decode(FORMAT)#recibo coor final
 
@@ -152,15 +189,7 @@ while True:
         #Quedo en espera de que el engine me mande instrucciones
 
         #hay que hacer un hilo
-        opcion = input("Desea mostrar el mapa?(s/n)")
-        if(opcion=="s" or opcion =="S"):
-            print(f"mostrar el mapa")
-
-        elif(opcion =="n" or opcion=="N"):
-            print(f"no mostrar el mapa")
-
-        else:
-            print(f"opcion incorrecta")
+        
         
 
 

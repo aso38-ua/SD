@@ -80,6 +80,7 @@ ad_weather_thread.daemon = True
 ad_weather_thread.start()
 
 
+
 def autenticar_dron(conn, db_cursor):
     msg = conn.recv(HEADER).decode(FORMAT)
     print(msg)
