@@ -106,7 +106,34 @@ def editar_perfil(opcion,newID):
     send(str(ID), client)
     send(str(newID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
+    if respuesta:
+        TOKEN = respuesta
 
+        conexion = sqlite3.connect('drone.db')
+
+        # Crear un cursor
+        cursor = conexion.cursor()
+
+        nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
+
+        # Insertar el nuevo registro en la tabla "drone"
+        if id_existe(ID,cursor) == False:
+            cursor.execute("UPDATE drone SET id = ? WHERE id = ?;", (newID, ID))
+
+            # Guardar los cambios en la base de datos
+            conexion.commit()
+
+            # Cerrar la conexión
+            conexion.close()
+            print(f"Respuesta del servidor: {TOKEN}")
+            print("Dron registrado con éxito!")
+
+        else:
+            print("Ya existe el ID")
+            conexion.close()
+
+    else:
+        print("No se pudo actualizar el dron.")
     print(f"Respuesta del servidor: {respuesta}")
     print("Perfil editado con éxito!")
 
@@ -119,6 +146,36 @@ def darse_de_baja(opcion):
     send(str(ID), client)
     respuesta = client.recv(HEADER).decode(FORMAT)
     print(f"Respuesta del servidor: {respuesta}")
+    
+    if respuesta:
+        TOKEN = respuesta
+
+        conexion = sqlite3.connect('drone.db')
+
+        # Crear un cursor
+        cursor = conexion.cursor()
+
+        nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
+
+        # Insertar el nuevo registro en la tabla "drone"
+        if id_existe(ID,cursor) == False:
+            cursor.execute("DELETE FROM drone WHERE id = ?;",  (ID))
+
+            # Guardar los cambios en la base de datos
+            conexion.commit()
+
+            # Cerrar la conexión
+            conexion.close()
+            print(f"Respuesta del servidor: {TOKEN}")
+            print("Dron registrado con éxito!")
+
+        else:
+            print("Ya existe el ID")
+            conexion.close()
+
+    else:
+        print("No se pudo actualizar el dron.")
+
     print("Dado de baja con éxito!")
 
 # Menú principal
