@@ -36,16 +36,18 @@ def handle_client(conn, addr):
     connected = True
     while connected:
         try:
-            msg_length = conn.recv(HEADER).decode(FORMAT)
-            if msg_length == 'q':
-                print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
-                break
-            msg_length = int(msg_length)
-            msg = conn.recv(2048).decode(FORMAT)
+            mensaje_completo = conn.recv(2048).decode(FORMAT)
+
+            # Divide el mensaje utilizando la coma como separador
+            opcion, ID = mensaje_completo.split(',')
+
+            # Ahora tienes la opción y el ID por separado
+            print("Opción:", opcion)
+            print("ID:", ID)
             
-            if msg_length == 1:
+            if opcion == "1":
                 # Opción 1: Registro de dron
-                if id_existe(msg, db_cursor):
+                if id_existe(ID, db_cursor):
                     respuesta = "El id ya existe"
                     conn.send(respuesta.encode(FORMAT))
                 else:
@@ -53,13 +55,13 @@ def handle_client(conn, addr):
                     print("Token de acceso es: ", token)
                     
                     # Insertar los datos en la base de datos
-                    db_cursor.execute("INSERT INTO Dron (token, id) VALUES (?, ?)", (token, msg))
+                    db_cursor.execute("INSERT INTO Dron (token, id) VALUES (?, ?)", (token, ID))
                     db_connection.commit()
                     
                     conn.send(token.encode(FORMAT))
-            elif msg_length == 2:
+            elif opcion == 2:
                 try:
-                    if id_existe(msg,db_cursor):
+                    if id_existe(ID,db_cursor):
                         id_dron= conn.recv(2048).decode(FORMAT)
                         # Recibir el nuevo valor desde el cliente
                         nuevo_valor = conn.recv(2048).decode(FORMAT)
@@ -78,15 +80,15 @@ def handle_client(conn, addr):
                 except Exception as e:
                     print(f"Error al actualizar el valor en la base de datos: {e}")
 
-            elif msg_length == 3:
+            elif opcion == 3:
                 try:
-                    if id_existe(msg, db_cursor) == False:
+                    if id_existe(ID, db_cursor) == False:
                         respuesta = "El id no existe"
                         conn.send(respuesta.encode(FORMAT))
                     else:
                         id_dron = conn.recv(2048).decode(FORMAT)
 
-                        db_cursor.execute("DELETE FROM Dron WHERE id = ?", (msg))
+                        db_cursor.execute("DELETE FROM Dron WHERE id = ?", (ID))
                         db_connection.commit()
 
                         respuesta="Dron borrado con éxito"

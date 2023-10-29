@@ -62,11 +62,11 @@ def gestionarMovimientos():
     # Función para registrar un dron
 def registrar_dron(opcion):
     print("Registrando un dron...")
-    send(opcion,client)
-    print(ID)
-    time.sleep(5)
-   
-    send(str(ID), client)
+
+    # Combina la opción y el ID con una coma como separador
+    mensaje = f"{opcion},{ID}"
+
+    client.send(mensaje.encode(FORMAT))
     respuesta = client.recv(2048).decode(FORMAT)
 
     if respuesta:
@@ -90,10 +90,12 @@ def registrar_dron(opcion):
             conexion.close()
             print(f"Respuesta del servidor: {TOKEN}")
             print("Dron registrado con éxito!")
+            client.close()
 
         else:
             print("Ya existe el ID")
             conexion.close()
+            client.close()
 
     else:
         print("No se pudo registrar el dron.")
@@ -115,8 +117,6 @@ def editar_perfil(opcion,newID):
 
         # Crear un cursor
         cursor = conexion.cursor()
-
-        nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
 
         # Insertar el nuevo registro en la tabla "drone"
         if id_existe(ID,cursor) == False:
