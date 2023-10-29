@@ -59,15 +59,14 @@ def handle_client(conn, addr):
                     db_connection.commit()
                     
                     conn.send(token.encode(FORMAT))
-            elif opcion == 2:
+            elif opcion == "2":
                 try:
                     if id_existe(ID,db_cursor):
-                        id_dron= conn.recv(2048).decode(FORMAT)
                         # Recibir el nuevo valor desde el cliente
                         nuevo_valor = conn.recv(2048).decode(FORMAT)
 
                         # Ejecutar una consulta SQL para actualizar el valor en la tabla
-                        db_cursor.execute("UPDATE Dron SET id = ? WHERE id = ?", (nuevo_valor, id_dron))
+                        db_cursor.execute("UPDATE Dron SET id = ? WHERE id = ?", (nuevo_valor, ID))
                         db_connection.commit()
 
                         respuesta = "Valor actualizado con éxito"
@@ -80,13 +79,12 @@ def handle_client(conn, addr):
                 except Exception as e:
                     print(f"Error al actualizar el valor en la base de datos: {e}")
 
-            elif opcion == 3:
+            elif opcion == "3":
                 try:
                     if id_existe(ID, db_cursor) == False:
                         respuesta = "El id no existe"
                         conn.send(respuesta.encode(FORMAT))
                     else:
-                        id_dron = conn.recv(2048).decode(FORMAT)
 
                         db_cursor.execute("DELETE FROM Dron WHERE id = ?", (ID))
                         db_connection.commit()

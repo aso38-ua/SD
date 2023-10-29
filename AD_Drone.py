@@ -101,15 +101,20 @@ def registrar_dron(opcion):
         print("No se pudo registrar el dron.")
 
 # Función para editar el perfil del dron
-def editar_perfil(opcion,newID):
+def editar_perfil(opcion):
     print("Editando el perfil del dron...")
     # Aquí puedes agregar tu lógica para editar el perfil
 
-    send(str(opcion),client)
-    
-    send(str(ID), client)
-    send(str(newID), client)
-    respuesta = client.recv(HEADER).decode(FORMAT)
+    mensaje = f"{opcion},{ID}"
+
+    client.send(mensaje.encode(FORMAT))
+
+    newID=input("Cual es el nuevo id que quieres?: ")
+
+    client.send(newID.encode(FORMAT))
+
+    respuesta = client.recv(2048).decode(FORMAT)
+
     if respuesta:
         TOKEN = respuesta
 
@@ -119,7 +124,7 @@ def editar_perfil(opcion,newID):
         cursor = conexion.cursor()
 
         # Insertar el nuevo registro en la tabla "drone"
-        if id_existe(ID,cursor) == False:
+        if id_existe(newID,cursor) == False:
             cursor.execute("UPDATE drone SET id = ? WHERE id = ?;", (newID, ID))
 
             # Guardar los cambios en la base de datos
@@ -128,36 +133,37 @@ def editar_perfil(opcion,newID):
             # Cerrar la conexión
             conexion.close()
             print(f"Respuesta del servidor: {TOKEN}")
-            print("Dron registrado con éxito!")
+            print("Dron actualizado con éxito!")
+            ID=newID
+            client.close()
 
         else:
             print("Ya existe el ID")
             conexion.close()
+            client.close()
 
     else:
         print("No se pudo actualizar el dron.")
-    print(f"Respuesta del servidor: {respuesta}")
-    print("Perfil editado con éxito!")
+        client.close()
+
 
 # Función para darse de baja
 def darse_de_baja(opcion):
     print("Dándose de baja...")
-    # Aquí puedes agregar tu lógica para darte de baja
-    print("Registrando un dron...")
-    send(str(opcion),client)
-    send(str(ID), client)
+    
+    mensaje = f"{opcion},{ID}"
+
+    client.send(mensaje.encode(FORMAT))
+
     respuesta = client.recv(HEADER).decode(FORMAT)
     print(f"Respuesta del servidor: {respuesta}")
     
     if respuesta:
-        TOKEN = respuesta
 
         conexion = sqlite3.connect('drone.db')
 
         # Crear un cursor
         cursor = conexion.cursor()
-
-        nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
 
         # Insertar el nuevo registro en la tabla "drone"
         if id_existe(ID,cursor) == False:
@@ -168,15 +174,18 @@ def darse_de_baja(opcion):
 
             # Cerrar la conexión
             conexion.close()
-            print(f"Respuesta del servidor: {TOKEN}")
-            print("Dron registrado con éxito!")
+            print(f"Respuesta del servidor: {respuesta}")
+            print("Dron eliminado con éxito!")
+            client.close()
 
         else:
             print("Ya existe el ID")
             conexion.close()
+            client.close()
 
     else:
         print("No se pudo actualizar el dron.")
+        client.close()
 
     print("Dado de baja con éxito!")
 
@@ -210,8 +219,9 @@ while True:
                 break
             elif sub_opcion == "2":
                 
-                resp=input("Cual es el nuevo id que quieres?")
-                editar_perfil(sub_opcion,resp)
+                
+                editar_perfil(sub_opcion)
+                break
             elif sub_opcion == "3":
                 
                 print(f"Establecida conexión en {ADDREG}")
