@@ -9,14 +9,17 @@ import argparse
 import pygame
 from confluent_kafka import Producer, Consumer, KafkaError
 from map import Map
+import time
 
+pygame.init()
 screen_width = 800
 screen_height = 600
 screen = pygame.display.set_mode((screen_width, screen_height))
 my_map = Map(screen)
 
 KAFKA_BROKER = "127.0.0.1:9092"
-KAFKA_TOPIC = "drones"
+KAFKA_TOPIC = "drones-positions"
+KAFKA_TOPIC_SEC = "map"
 PRODUCER_CONFIG = {
     'bootstrap.servers': KAFKA_BROKER,
     'client.id': 'python-producer'
@@ -30,8 +33,13 @@ CONSUMER_CONFIG = {
 producer = Producer(PRODUCER_CONFIG)
 consumer = Consumer(CONSUMER_CONFIG)
 
-# Diccionario para mantener las posiciones de los drones
-drone_positions = {}
+
+
+# Ruta al archivo donde se almacenarán las figuras
+archivo_figura = "figura.txt"
+
+# Bandera para controlar si el motor debe esperar a las figuras
+esperar_figura = False
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
@@ -54,6 +62,60 @@ FIN = "FIN"
 AD_WEATHER_SERVER = "127.0.1.1"
 AD_WEATHER_PORT = 5052
 
+def send_message_to_kafka_from_figuras(topic, final_positions):
+    producer = Producer(PRODUCER_CONFIG)
+    for position, id_dron in final_positions:
+        x_destino, y_destino = position
+        message = f"{id_dron},{x_destino},{y_destino}"
+        producer.produce(topic, key=None, value=message)
+        print(f"Mensaje producido a Kafka: {message}")
+    producer.flush()
+
+def cargar_figura(figura):
+    with open(archivo_figura, "w") as file:
+        file.write(figura)
+
+def ejecutar_figura(id_dron, x_destino, y_destino):
+    # Aquí puedes implementar la lógica para mover el dron a las coordenadas de destino
+    print(f"Ejecutando figura para dron {id_dron}: Moviendo a ({x_destino}, {y_destino})")
+    # Simulación de movimiento
+    time.sleep(2)
+
+def procesar_figuras():
+    try:
+        with open(archivo_figura, "r") as file:
+            figuras = file.read()
+            if figuras:
+                print(f"Se encontraron figuras para ejecutar:\n{figuras}")
+                lineas = figuras.strip().split('\n')
+                # Inicializa la lista de posiciones de los drones
+                final_positions = []
+                for linea in lineas[1:-1]:  # Ignorar la primera y última línea
+                    campos = linea.split()
+                    if len(campos) == 3:  # Verificar que hay cuatro campos
+                        id_dron = campos[0]
+                        x_destino = int(campos[1])
+                        y_destino = int(campos[2])
+                        # Agrega la posición del dron en el formato correcto
+                        final_positions.append(((x_destino, y_destino), id_dron))
+                        print(f"Figura procesada para dron {id_dron}: Moviendo a ({x_destino}, {y_destino})")
+                send_message_to_kafka_from_figuras(KAFKA_TOPIC, final_positions)
+                print("Figuras procesadas")
+                return final_positions
+            else:
+                print("El archivo de figuras está vacío.")
+                return []  # Retorna una lista vacía si no hay figuras en el archivo
+    except FileNotFoundError:
+        print("El archivo de figuras no se ha encontrado.")
+        return []  # Retorna una lista vacía si el archivo no se encuentra
+    except Exception as e:
+        print(f"Error al procesar las figuras: {e}")
+        return []  # Retorna una lista vacía en caso de error
+    
+drone_positions=[]
+
+# Cargar y procesar las figuras desde el archivo "figuras.txt"
+final_positions = procesar_figuras()
 
 # Esta función se ejecutará en un hilo separado para obtener la temperatura desde AD_Weather
 def get_temperature_from_ad_weather():
@@ -105,17 +167,14 @@ def autenticar_dron(conn, db_cursor):
         return False
 
 
-def send_message_to_kafka(topic, message):
-    producer = Producer(PRODUCER_CONFIG)
-    producer.produce(topic, key=None, value=message)
-    producer.flush()
-
 # Función para verificar si el mensaje se envió correctamente
 def check_message_delivery():
     producer.flush()
     print("Mensaje enviado a Kafka y verificado")
 
 def handle_client(conn, addr):
+    global esperar_figura
+
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
     # Crear una conexión de base de datos SQLite para este hilo
     db_connection = sqlite3.connect('Registro.db')
@@ -127,20 +186,23 @@ def handle_client(conn, addr):
     conn.recv(2048).decode(FORMAT)
     conectado=autenticar_dron(conn, db_cursor)
     
-    connected = True
-    while connected:
+    while True:
         try:
-            
             if not conectado:
-                print(f"[CONEXIÓN CERRADA] fallo al autenticar, {addr} se ha desconectado.")
+                print(f"[CONEXIÓN CERRADA] Fallo al autenticar, {addr} se ha desconectado.")
                 break
-            
-            msg2 = "Polla de negro"
-            print(msg2)
-            
-            # Envía el mensaje al tópico de Kafka
-            producer.produce(KAFKA_TOPIC, key=None, value=msg2)
-            
+
+            if esperar_figura:
+                print("Esperando una figura para ejecutar...")
+                # Aquí puedes implementar la lógica para leer una figura desde el archivo
+                with open(archivo_figura, "r") as file:
+                    figura = file.read()
+                    if figura:
+                        print(f"Se encontró una figura para ejecutar:\n{figura}")
+                        # Procesa y ejecuta la figura
+                        cargar_figura("")  # Borra la figura después de ejecutarla
+                        esperar_figura = False  # Deja de esperar figuras
+
             conn.send("Mensaje enviado a Kafka".encode(FORMAT))
         except Exception as e:
             print(f"Error al procesar el mensaje: {e}")
@@ -154,7 +216,7 @@ def handle_client(conn, addr):
 
 def consume_messages():
     consumer = Consumer(CONSUMER_CONFIG)
-    consumer.subscribe([KAFKA_TOPIC])
+    consumer.subscribe([KAFKA_TOPIC_SEC])
 
     try:
         while True:
@@ -172,7 +234,13 @@ def consume_messages():
             # Parsea la posición del dron desde el mensaje
             try:
                 drone_name, x, y = payload.split(',')
-                drone_positions[drone_name] = (int(x), int(y))
+                x, y = int(x), int(y)
+                if drone_name in drone_positions:
+                    # Si el dron ya está en el diccionario, actualiza sus coordenadas
+                    drone_positions[drone_name] = (x, y)
+                else:
+                    # Si el dron no está en el diccionario, agrégalo
+                    drone_positions[drone_name] = (x, y)
                 print(f"Posición de {drone_name}: ({x}, {y})")
             except ValueError:
                 print(f"Error al analizar la posición del dron: {payload}")
@@ -182,16 +250,18 @@ def consume_messages():
         consumer.close()
 
 
+
 def main_game_loop():
-    pygame.init()
+
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            my_map.display_map()
 
         # Actualiza el mapa con las posiciones de los drones
-        my_map.update_drones(drone_positions.items())
+        my_map.update_drones(drone_positions)
 
         # Actualiza la pantalla
         pygame.display.flip()
@@ -215,9 +285,9 @@ def start():
     print(CONEX_ACTIVAS)
     
     # Inicia el hilo para consumir mensajes de Kafka
-    kafka_thread = threading.Thread(target=consume_messages)
-    kafka_thread.daemon = True
-    kafka_thread.start()
+    #kafka_thread = threading.Thread(target=consume_messages)
+    #kafka_thread.daemon = True
+    #kafka_thread.start()
 
         
     while True:

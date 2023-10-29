@@ -4,9 +4,18 @@ from map import Map
 import sqlite3
 import argparse
 import time
+import threading
+from confluent_kafka import Consumer, KafkaError
 
 ID = 0 #Por defecto
 TOKEN = ""
+KAFKA_TOPIC = "drones-positions"
+
+CONSUMER_CONFIG = {
+    'bootstrap.servers': '127.0.0.1:9092',
+    'group.id': 'dron-consumer',
+    'auto.offset.reset': 'earliest'
+}
 
 HEADER = 64
 PORTENGINE = 5051
@@ -24,9 +33,50 @@ def send(msg, client_socket):
     client_socket.send(send_length)
     client_socket.send(message)
 
-# if len(sys.argv) != 7:
-#     print("Oops!. Parece que algo falló. Necesito estos argumentos: <ServerIP> <Puerto>")
-#     sys.exit()
+id = None
+x = None
+y = None
+
+def consume_messages(dron_id):
+    consumer = Consumer(CONSUMER_CONFIG)
+    consumer.subscribe([KAFKA_TOPIC])
+
+    try:
+        while True:
+            msg = consumer.poll(1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    print(f"Error al consumir mensaje: {msg.error()}")
+                    break
+            payload = msg.value().decode('utf-8')
+            
+            # Procesa el mensaje y separa los campos
+            parts = payload.split(',')
+            if len(parts) == 3:
+                id, x, y = parts
+                if id == dron_id:
+                    # Convierte las coordenadas a enteros si es necesario
+                    try:
+                        x = int(x)
+                        y = int(y)
+                    except ValueError:
+                        pass  # En caso de que no se pueda convertir a entero
+                    # Aquí puedes trabajar con los valores de id, x e y
+                    print(f"ID: {id}, X: {x}, Y: {y}")
+                else:
+                    print(f"Mensaje ignorado para ID {id}: {payload}")
+            else:
+                print("Mensaje no válido:", payload)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        consumer.close()
+
+
 
 def id_existe(id, db_cursor):
     # Comprueba si el ID ya existe en la base de datos
@@ -57,6 +107,11 @@ ID= args.Id
 #=sys.argv[]
 def gestionarMovimientos():
     print("jejeje")
+
+
+kafka_thread = threading.Thread(target=consume_messages, args=(ID,))
+kafka_thread.daemon = True
+kafka_thread.start()
 
 
     # Función para registrar un dron

@@ -1,0 +1,5 @@
+<FIGURA>
+Dron1 5 10
+Dron2 13 13
+Dron3 8 7
+</FIGURA>
