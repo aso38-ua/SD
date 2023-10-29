@@ -3,6 +3,7 @@ import socket
 from map import Map
 import sqlite3
 import argparse
+import time
 
 ID = 0 #Por defecto
 TOKEN = ""
@@ -63,6 +64,7 @@ def registrar_dron(opcion):
     print("Registrando un dron...")
     send(opcion,client)
     print(ID)
+    time.sleep(5)
    
     send(str(ID), client)
     respuesta = client.recv(2048).decode(FORMAT)
