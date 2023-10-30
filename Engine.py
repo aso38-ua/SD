@@ -19,7 +19,7 @@ my_map = Map(screen)
 
 KAFKA_BROKER = "127.0.0.1:9092"
 KAFKA_TOPIC = "drones-positions"
-KAFKA_TOPIC_SEC = "map"
+KAFKA_TOPIC_SEC = "drones-coordinate"
 PRODUCER_CONFIG = {
     'bootstrap.servers': KAFKA_BROKER,
     'client.id': 'python-producer'
@@ -32,8 +32,6 @@ CONSUMER_CONFIG = {
 }
 producer = Producer(PRODUCER_CONFIG)
 consumer = Consumer(CONSUMER_CONFIG)
-
-
 
 # Ruta al archivo donde se almacenarán las figuras
 archivo_figura = "figura.txt"

@@ -5,16 +5,27 @@ import sqlite3
 import argparse
 import time
 import threading
-from confluent_kafka import Consumer, KafkaError
+import math
+from confluent_kafka import Consumer, KafkaError, Producer
+import time
+import re
+
 
 ID = 0 #Por defecto
 TOKEN = ""
 KAFKA_TOPIC = "drones-positions"
+KAFKA_TOPIC_SEC = "drones-coordinate"
+KAFKA_BROKER = "127.0.0.1:9092"
 
 CONSUMER_CONFIG = {
     'bootstrap.servers': '127.0.0.1:9092',
     'group.id': 'dron-consumer',
     'auto.offset.reset': 'earliest'
+}
+
+PRODUCER_CONFIG = {
+    'bootstrap.servers': KAFKA_BROKER,
+    'client.id': 'python-producer'
 }
 
 HEADER = 64
@@ -36,6 +47,8 @@ def send(msg, client_socket):
 id = None
 x = None
 y = None
+
+drone_positions = {}
 
 def consume_messages(dron_id):
     consumer = Consumer(CONSUMER_CONFIG)
@@ -66,7 +79,9 @@ def consume_messages(dron_id):
                     except ValueError:
                         pass  # En caso de que no se pueda convertir a entero
                     # Aquí puedes trabajar con los valores de id, x e y
-                    print(f"ID: {id}, X: {x}, Y: {y}")
+                    message = f"({x}, {y}), {id}"
+                    drone_positions[dron_id] = message
+                    print(f"Mensaje: {message}")
                 else:
                     print(f"Mensaje ignorado para ID {id}: {payload}")
             else:
@@ -104,14 +119,42 @@ ADDREG=(SERVERREG,PORTREG)
 ID= args.Id
 #coor=sys.argv[5]
 
-#=sys.argv[]
-def gestionarMovimientos():
-    print("jejeje")
+# Función para calcular la distancia euclidiana
+def calcular_distancia(x1, y1, x2, y2):
+    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
+# Función para mover el dron hacia la posición final
+def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
+    x_actual, y_actual = 0, 0  # Coordenadas iniciales del dron
 
-kafka_thread = threading.Thread(target=consume_messages, args=(ID,))
-kafka_thread.daemon = True
-kafka_thread.start()
+    # Define la velocidad a la que se mueve el dron (puedes ajustarla)
+    velocidad = 1
+
+    producer = Producer(PRODUCER_CONFIG)
+
+    while (x_actual, y_actual) != (x_destino, y_destino):
+        # Calcula el desplazamiento en x e y para avanzar hacia el destino
+        if x_actual < x_destino:
+            x_actual += velocidad
+        elif x_actual > x_destino:
+            x_actual -= velocidad
+
+        if y_actual < y_destino:
+            y_actual += velocidad
+        elif y_actual > y_destino:
+            y_actual -= velocidad
+
+        time.sleep(1)
+        # Actualiza la posición del dron en el diccionario
+        drone_positions[drone_id] = (x_actual, y_actual)
+        print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}")
+
+        # Envía la nueva posición a Kafka
+        mensaje_kafka = f"{x_actual},{y_actual},{drone_id}"
+        producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+        producer.flush()  # Asegura que el mensaje se envíe a Kafka
+
+    print(f"Dron {drone_id} ha llegado a su destino en ({x_destino}, {y_destino})")
 
 
     # Función para registrar un dron
@@ -288,37 +331,56 @@ while True:
 
     elif opcion == "2":
         print("Unirse al espectáculo...")
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.connect(ADDRENG)
+        conexion = sqlite3.connect('drone.db')
 
-        opcion = input("Desea mostrar el mapa?(s/n)")
-        if(opcion=="s" or opcion =="S"):
-            print(f"mostrar el mapa")
+        # Crear un cursor
+        cursor = conexion.cursor()
+        if id_existe(ID,cursor):
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.connect(ADDRENG)
 
-        elif(opcion =="n" or opcion=="N"):
-            print(f"no mostrar el mapa")
+            opcion = input("Desea mostrar el mapa?(s/n)")
+            if(opcion=="s" or opcion =="S"):
+                print(f"mostrar el mapa")
+
+            elif(opcion =="n" or opcion=="N"):
+                print(f"no mostrar el mapa")
+
+            else:
+                print(f"opcion incorrecta")
+
+            send(TOKEN,client)
+
+            kafka_thread = threading.Thread(target=consume_messages, args=(ID,))
+            kafka_thread.daemon = True
+            kafka_thread.start()
+            
+            print(f"Establecida conexión en {ADDRENG}")
+            
+            while not drone_positions:
+                time.sleep(1)  # Espera 1 segundo antes de verificar nuevamente
+            
+
+            print("Contenido de drone_positions:")
+            for dron_id, position in drone_positions.items():
+                print(f"ID: {dron_id}, Posición: {position}")
+
+            position_info = drone_positions["Dron1"]
+            # Elimina el texto innecesario y los paréntesis
+            position_info = position_info.replace("ID: Dron1, Posición: ", "").strip('()')
+            # Divide la cadena en coordenadas x e y
+            matches = re.findall(r'\d+', position_info)
+
+            # Convierte las coincidencias en números enteros
+            x_destino = int(matches[0])
+            y_destino = int(matches[1])
+
+            time.sleep(3)
+
+            mover_dron_hacia_destino(ID, x_destino, y_destino)
 
         else:
-            print(f"opcion incorrecta")
-
-        send(TOKEN,client)
-        coor = client.recv(HEADER).decode(FORMAT)#recibo coor final
-
-        #Si un dron falla o su aplicación se bloquea por cualquier causa es eliminado visualmente de la acción
-                 
-
-        #Autentificar el token
-            #Envio token
-            #ESpero respuesta
-        #Quedo en espera de que el engine me mande instrucciones
-
-        #hay que hacer un hilo
-        
-        
-
-
-
-        print(f"Establecida conexión en {ADDRENG}")
+            print(f"No estás registrado {ID}")
 
     elif opcion == "3":
         print("Saliendo del programa. ¡Hasta luego!")
