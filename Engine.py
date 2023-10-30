@@ -119,20 +119,24 @@ final_positions = procesar_figuras()
 def get_temperature_from_ad_weather():
     while True:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ad_weather_socket:
-            ad_weather_socket.connect((AD_WEATHER_SERVER, AD_WEATHER_PORT))
-            print("Conectado al servidor AD_Weather.")
+            try:
+                ad_weather_socket.connect((AD_WEATHER_SERVER, AD_WEATHER_PORT))
+                print("Conectado al servidor AD_Weather.")
+                ad_weather_socket.send(b"GET_TEMPERATURA")
+                
+                data = ad_weather_socket.recv(1024)
+                if not data:
+                    break
 
-            # Envia una solicitud de temperatura
-            ad_weather_socket.send(b"GET_TEMPERATURA")
-            
-            data = ad_weather_socket.recv(1024)
-            if not data:
+                temperature = data.decode('utf-8')
+                print(f"Temperatura actual: {temperature}°C")
                 break
-
-            # Procesa y muestra la temperatura
-            temperature = data.decode('utf-8')
-            print(f"Temperatura actual: {temperature}°C")
-            break
+            except ConnectionRefusedError:
+                print("No se pudo conectar al servidor AD_Weather. Intentando de nuevo en 30 segundos.")
+                time.sleep(30)
+            except Exception as e:
+                print(f"Error al obtener la temperatura: {e}")
+                break
 
 # Agrega un hilo para conectarse a AD_Weather y obtener la temperatura
 ad_weather_thread = threading.Thread(target=get_temperature_from_ad_weather)

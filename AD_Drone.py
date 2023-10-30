@@ -7,7 +7,6 @@ import time
 import threading
 import math
 from confluent_kafka import Consumer, KafkaError, Producer
-import time
 import re
 
 

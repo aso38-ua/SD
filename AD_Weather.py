@@ -1,6 +1,8 @@
 import sqlite3
 import socket
 import threading
+import random
+import time
 
 HEADER = 64
 PORT = 5052
@@ -26,20 +28,43 @@ def temperatura():
     conexion.close()
     return temperatura
 
+# Función para actualizar valores aleatorios en la base de datos
+def actualizar_valores_aleatorios():
+    while True:
+        nuevo_valor = random.randint(-10, 50)
+        conexion = sqlite3.connect('clima.db')
+        cursor = conexion.cursor()
+        cursor.execute("UPDATE clima SET temperatura = ?", (nuevo_valor,))
+        conexion.commit()
+        conexion.close()
+        print(f"Valor actualizado en la base de datos: {nuevo_valor}")
+        time.sleep(60)  # Actualiza cada 60 segundos
+
+# Inicia el hilo para la actualización de valores aleatorios
+update_thread = threading.Thread(target=actualizar_valores_aleatorios)
+update_thread.daemon = True
+update_thread.start()
+
+
+# Función para manejar al cliente y enviar la temperatura cuando cambia
 def handle_client(conn, addr):
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
 
     connected = True
+    temp_anterior = None  # Almacena la temperatura anterior
+
     while connected:
         msg_length = conn.recv(HEADER).decode(FORMAT)
         if not msg_length:
             print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
             break
 
-
-        temp = temperatura()
-
-        conn.send(str(temp).encode(FORMAT))
+        temp_actual = temperatura()
+        
+        if temp_actual != temp_anterior:
+            # Si la temperatura cambió, envía la nueva temperatura al cliente
+            conn.send(str(temp_actual).encode(FORMAT))
+            temp_anterior = temp_actual
 
     print(f"ADIOS. TE ESPERO EN OTRA OCASIÓN [{addr}]")
     conn.close()
