@@ -8,6 +8,9 @@ import threading
 import math
 from confluent_kafka import Consumer, KafkaError, Producer
 import re
+import pygame
+
+
 
 
 ID = 0 #Por defecto
@@ -146,7 +149,13 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
         time.sleep(1)
         # Actualiza la posición del dron en el diccionario
         drone_positions[drone_id] = (x_actual, y_actual)
+        time.sleep(1)
         print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}")
+
+        drone_p = [((1, 1), "Dron1")]
+
+        # Llama a la función para actualizar los drones en el mapa
+        my_map.update_drones(drone_p)
 
         # Envía la nueva posición a Kafka
         mensaje_kafka = f"{x_actual},{y_actual},{drone_id}"
@@ -288,6 +297,26 @@ def darse_de_baja(opcion):
 
 # Menú principal
 
+def main_game_loop():
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            my_map.display_map()
+
+        # Actualiza el mapa con las posiciones de los drones
+        my_map.update_drones(drone_positions)
+
+        # Actualiza la pantalla
+        pygame.display.flip()
+
+# Función para ejecutar el bucle del mapa en un hilo separado
+def game_loop_thread():
+    while True:
+        main_game_loop()
+
 #Aqui me tiene que pasar alberto algo para que el dron deje de funcionar por la temperatura
 while True:
 
@@ -341,6 +370,16 @@ while True:
             opcion = input("Desea mostrar el mapa?(s/n)")
             if(opcion=="s" or opcion =="S"):
                 print(f"mostrar el mapa")
+                pygame.init()
+                screen_width = 800
+                screen_height = 600
+                screen = pygame.display.set_mode((screen_width, screen_height))
+                my_map = Map(screen)
+                
+                # Inicia el hilo para el bucle del mapa
+                game_thread = threading.Thread(target=game_loop_thread)
+                game_thread.daemon = True
+                game_thread.start()
 
             elif(opcion =="n" or opcion=="N"):
                 print(f"no mostrar el mapa")

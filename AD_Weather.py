@@ -10,7 +10,7 @@ SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 FIN = "FIN"
-MAX_CONEXIONES = 2
+MAX_CONEXIONES = 5
 
 def temperatura():
     conexion = sqlite3.connect('clima.db')  # Conecta a la base de datos SQLite
@@ -54,15 +54,11 @@ def handle_client(conn, addr):
     temp_anterior = None  # Almacena la temperatura anterior
 
     while connected:
-        msg_length = conn.recv(HEADER).decode(FORMAT)
-        if not msg_length:
-            print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
-            break
+        
 
         temp_actual = temperatura()
         
         if temp_actual != temp_anterior:
-            # Si la temperatura cambió, envía la nueva temperatura al cliente
             conn.send(str(temp_actual).encode(FORMAT))
             temp_anterior = temp_actual
 
