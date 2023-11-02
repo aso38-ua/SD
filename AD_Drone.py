@@ -21,7 +21,7 @@ KAFKA_BROKER = "127.0.0.1:9092"
 
 CONSUMER_CONFIG = {
     'bootstrap.servers': '127.0.0.1:9092',
-    'group.id': 'dron-consumer',
+    'group.id': 'drones-positions',
     'auto.offset.reset': 'earliest'
 }
 
@@ -152,10 +152,10 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
         time.sleep(1)
         print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}")
 
-        drone_p = [((1, 1), "Dron1")]
+        #drone_positions = [((1, 1), "Dron1")]
 
         # Llama a la función para actualizar los drones en el mapa
-        my_map.update_drones(drone_p)
+        #my_map.update_drones(drone_positions)
 
         # Envía la nueva posición a Kafka
         mensaje_kafka = f"{x_actual},{y_actual},{drone_id}"
@@ -387,7 +387,7 @@ while True:
             else:
                 print(f"opcion incorrecta")
 
-            send(TOKEN,client)
+
 
             kafka_thread = threading.Thread(target=consume_messages, args=(ID,))
             kafka_thread.daemon = True
