@@ -81,9 +81,10 @@ def consume_messages(dron_id):
                     except ValueError:
                         pass  # En caso de que no se pueda convertir a entero
                     # Aquí puedes trabajar con los valores de id, x e y
-                    message = f"({x}, {y}), {id}"
+                    message = (x, y)
                     drone_positions[dron_id] = message
-                    print(f"Mensaje: {message}")
+                    print(f"Mensaje:{dron_id} en {message}")
+                    
                 else:
                     print(f"Mensaje ignorado para ID {id}: {payload}")
             else:
@@ -307,7 +308,7 @@ def main_game_loop():
             my_map.display_map()
 
         # Actualiza el mapa con las posiciones de los drones
-        my_map.update_drones(drone_positions)
+        
 
         # Actualiza la pantalla
         pygame.display.flip()
@@ -401,21 +402,17 @@ while True:
 
             print("Contenido de drone_positions:")
             for dron_id, position in drone_positions.items():
-                print(f"ID: {dron_id}, Posición: {position}")
+                x, y = position
+                print(f"ID: {dron_id}, X: {x}, Y: {y}")
 
             position_info = drone_positions["Dron1"]
-            # Elimina el texto innecesario y los paréntesis
-            position_info = position_info.replace("ID: Dron1, Posición: ", "").strip('()')
-            # Divide la cadena en coordenadas x e y
-            matches = re.findall(r'\d+', position_info)
+            x, y = position_info  # Desempaqueta la tupla de posición
+            print(f"Posición del dron Dron1: X: {x}, Y: {y}")
 
-            # Convierte las coincidencias en números enteros
-            x_destino = int(matches[0])
-            y_destino = int(matches[1])
 
             time.sleep(3)
 
-            mover_dron_hacia_destino(ID, x_destino, y_destino)
+            mover_dron_hacia_destino(ID, x, y)
 
         else:
             print(f"No estás registrado {ID}")
