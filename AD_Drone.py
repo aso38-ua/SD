@@ -138,10 +138,11 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
     velocidad = 1
 
     producer = Producer(PRODUCER_CONFIG)
+    
 
     while (x_actual, y_actual) != (x_destino, y_destino):
         # Calcula el desplazamiento en x e y para avanzar hacia el destino
-        drones_coordinates=[((x_actual,y_actual),drone_id)]
+        drones_coordinates=[((x_actual,y_actual),drone_id,"moviendo")]
         if x_actual < x_destino:
             x_actual += velocidad
         elif x_actual > x_destino:
@@ -156,7 +157,7 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
         # Actualiza la posición del dron en el diccionario
         drone_positions[drone_id] = (x_actual, y_actual)
         
-        drones_coordinates=[((x_actual,y_actual),drone_id)]
+        drones_coordinates=[((x_actual,y_actual),drone_id,"moviendo")]
         print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}")
 
         #drone_positions = [((1, 1), "Dron1")]
@@ -170,7 +171,7 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
         producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
     print(f"Dron {drone_id} ha llegado a su destino en ({x_destino}, {y_destino})")
-
+    drones_coordinates=[((x_destino,y_destino),drone_id,"parado")]
 
     # Función para registrar un dron
 def registrar_dron(opcion):
@@ -313,7 +314,6 @@ def main_game_loop():
             if event.type == pygame.QUIT:
                 running = False
             my_map.display_map()
-
 
         # Actualiza el mapa con las posiciones de los drones
         my_map.update_drones(drones_coordinates)

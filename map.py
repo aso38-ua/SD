@@ -32,8 +32,15 @@ class Map:
             for j in range(self.tam):
                 # Verifica si hay un dron en esta posición
                 if (i, j) in self.drones:
-                    fill_color = (0, 255, 0)  # Verde para el dron
-                    drone_id = self.drones[(i, j)]  # Obtén el ID del dron
+                    drone_id = self.drones[(i, j)][0]  # Obtén el ID del dron
+                    estado=self.drones[(i, j)][1]
+                    fill_color = (255, 255, 255)  # Verde para el dron
+                    if estado == "moviendo":
+                        fill_color = (255, 0, 0)
+
+                    else:
+                        fill_color = (0, 255, 0)
+                    
                 else:
                     fill_color = (255, 255, 255)  # Blanco para celdas vacías
 
@@ -45,7 +52,7 @@ class Map:
                 # Dibuja el ID del dron en la casilla
                 if (i, j) in self.drones:
                     font = pygame.font.Font(None, 18)  # Tamaño de fuente
-                    text = font.render(drone_id, True, (0, 0, 0))  # Texto negro
+                    text = font.render(str(drone_id), True, (0, 0, 0))  # Texto negro
                     text_rect = text.get_rect()
                     text_rect.center = (j * square_size + square_size // 2, i * square_size + square_size // 2)  # Centra el texto
                     self.screen.blit(text, text_rect)
@@ -61,11 +68,14 @@ class Map:
         self.drones = {}  # Limpiamos el diccionario de drones
 
         # Actualiza el mapa con las nuevas posiciones de los drones
-        for position, drone_id in drone_data:
-            x, y = position
+        for data in drone_data:
+            x, y = data[0]  # Posición
+            drone_id = data[1]  # ID del dron
+            estado = data[2] if len(data) == 3 else "en posicion"  # Estado, con valor predeterminado
+
             if 0 <= x < self.tam and 0 <= y < self.tam:
                 self.matriz[x, y] = 1
-                self.drones[position] = drone_id
+                self.drones[(x, y)] = (drone_id, estado)
 
         # Compara el mapa actual con el mapa anterior para detectar cambios
         changes = np.where(self.matriz != previous_map)
@@ -76,15 +86,29 @@ class Map:
             fill_color = (0, 0, 0)  # Fondo negro en este ejemplo
             pygame.draw.rect(self.screen, fill_color, (y * 40 + 1, x * 40 + 1, 38, 38))
 
+            # Obtén el estado del dron (moviéndose o en posición)
+            drone_info = self.drones.get((x, y), ("", ""))
+            drone_id, estado = drone_info
+
+            # Dibuja el dron en rojo si está "moviéndose" o en verde si está "en posición"
+            if estado == "moviendo":
+                drone_color = (255, 0, 0)  # Rojo
+            elif estado == "parado":
+                drone_color = (0, 255, 0)
+            else:
+                drone_color = (255, 255, 255)  # Verde
+
+            pygame.draw.rect(self.screen, drone_color, (y * 40 + 1, x * 40 + 1, 38, 38))
+
             # Dibuja el ID del dron en la casilla
             font = pygame.font.Font(None, 18)
-            drone_id = self.drones.get((x, y), "")  # Usamos get para obtener el ID o una cadena vacía si no hay dron
             text = font.render(drone_id, True, (0, 0, 0))
             text_rect = text.get_rect()
             text_rect.center = (y * 40 + 20, x * 40 + 20)
             self.screen.blit(text, text_rect)
 
         pygame.display.update()
+
 
 
 
@@ -107,7 +131,7 @@ if __name__ == "__main__":
                 running = False
 
         # Ejemplo de cómo actualizar las posiciones de los drones
-        drone_positions = [((1, 1), "Dron1"), ((3, 3), "Dron2"), ((5, 5), "Dron3")]
+        drone_positions = [((1, 1), "Dron1","moviendo")]
         my_map.clear_drones()  # Borra las posiciones anteriores
         my_map.update_drones(drone_positions)  # Actualiza las nuevas posiciones
         my_map.display_map()
