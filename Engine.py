@@ -17,6 +17,11 @@ screen_height = 600
 screen = pygame.display.set_mode((screen_width, screen_height))
 my_map = Map(screen)
 
+global global_drone_positions
+global_drone_positions=[]
+# Define un cerrojo para sincronizar el acceso a global_drone_positions
+drone_positions_lock = threading.Lock()
+
 KAFKA_BROKER = "127.0.0.1:9092"
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
@@ -110,7 +115,7 @@ def procesar_figuras():
         print(f"Error al procesar las figuras: {e}")
         return []  # Retorna una lista vacía en caso de error
     
-drone_positions=[]
+
 
 # Cargar y procesar las figuras desde el archivo "figuras.txt"
 final_positions = procesar_figuras()
@@ -151,6 +156,7 @@ ad_weather_thread.start()
 
 
 def autenticar_dron(conn, db_cursor):
+    global global_drone_positions
     msg = conn.recv(HEADER).decode(FORMAT)
     print(msg)
     
@@ -167,7 +173,9 @@ def autenticar_dron(conn, db_cursor):
         # Autenticación correcta
         print("Autenticación correcta")
         conn.send("Autenticación correcta".encode(FORMAT))
+        
         return True
+        
         
     else:
         print("Incorrecto, expulsando dron")
@@ -181,6 +189,7 @@ def check_message_delivery():
 
 def handle_client(conn, addr):
     global esperar_figura
+    global global_drone_positions, my_map
 
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
     # Crear una conexión de base de datos SQLite para este hilo
@@ -188,16 +197,20 @@ def handle_client(conn, addr):
     db_cursor = db_connection.cursor()
     
     
+    
     # Autenticar al dron
-    conn.send("Token de autenticacion: ".encode(FORMAT))
-    conn.recv(2048).decode(FORMAT)
+
     conectado=autenticar_dron(conn, db_cursor)
+    with drone_positions_lock:
+        global_drone_positions=[((0, 0), "ID")]
     
     while True:
         try:
-            if not conectado:
+            
+            if conectado == False:
                 print(f"[CONEXIÓN CERRADA] Fallo al autenticar, {addr} se ha desconectado.")
                 break
+            
 
             if esperar_figura:
                 print("Esperando una figura para ejecutar...")
@@ -209,6 +222,7 @@ def handle_client(conn, addr):
                         # Procesa y ejecuta la figura
                         cargar_figura("")  # Borra la figura después de ejecutarla
                         esperar_figura = False  # Deja de esperar figuras
+
 
             conn.send("Mensaje enviado a Kafka".encode(FORMAT))
         except Exception as e:
@@ -242,12 +256,12 @@ def consume_messages():
             try:
                 drone_name, x, y = payload.split(',')
                 x, y = int(x), int(y)
-                if drone_name in drone_positions:
+                if drone_name in global_drone_positions:
                     # Si el dron ya está en el diccionario, actualiza sus coordenadas
-                    drone_positions[drone_name] = (x, y)
+                    global_drone_positions[drone_name] = (x, y)
                 else:
                     # Si el dron no está en el diccionario, agrégalo
-                    drone_positions[drone_name] = (x, y)
+                    global_drone_positions[drone_name] = (x, y)
                 print(f"Posición de {drone_name}: ({x}, {y})")
             except ValueError:
                 print(f"Error al analizar la posición del dron: {payload}")
@@ -257,8 +271,8 @@ def consume_messages():
         consumer.close()
 
 
-
 def main_game_loop():
+    global global_drone_positions, my_map
 
     running = True
     while running:
@@ -266,9 +280,11 @@ def main_game_loop():
             if event.type == pygame.QUIT:
                 running = False
             my_map.display_map()
+            
 
-        # Actualiza el mapa con las posiciones de los drones
-        my_map.update_drones(drone_positions)
+        with drone_positions_lock:
+            my_map.update_drones(global_drone_positions)
+
 
         # Actualiza la pantalla
         pygame.display.flip()
@@ -279,7 +295,8 @@ def game_loop_thread():
         main_game_loop()
 
 def start():
-
+    global global_drone_positions
+    
     # Inicia el hilo para el bucle del mapa
     game_thread = threading.Thread(target=game_loop_thread)
     game_thread.daemon = True
@@ -302,6 +319,7 @@ def start():
         CONEX_ACTIVAS = threading.active_count()
         if (CONEX_ACTIVAS <= MAX_CONEXIONES): 
             thread = threading.Thread(target=handle_client, args=(conn, addr))
+            thread.daemon=True
             thread.start()
             print(f"[CONEXIONES ACTIVAS] {CONEX_ACTIVAS}")
             print("CONEXIONES RESTANTES PARA CERRAR EL SERVICIO", MAX_CONEXIONES - CONEX_ACTIVAS)

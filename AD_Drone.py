@@ -364,9 +364,21 @@ while True:
 
         # Crear un cursor
         cursor = conexion.cursor()
+        db_cursor = conexion.cursor()
         if id_existe(ID,cursor):
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client.connect(ADDRENG)
+
+            print(ID)
+            db_cursor.execute("SELECT token FROM drone WHERE id=?", (ID,))
+            resultado = db_cursor.fetchone()
+            
+            if resultado:
+                # Obtiene el token de la consulta
+                token = resultado[0]
+                
+                # Envía el token al servidor a través del socket
+                client.send(token.encode(FORMAT))
 
             opcion = input("Desea mostrar el mapa?(s/n)")
             if(opcion=="s" or opcion =="S"):
