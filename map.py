@@ -58,6 +58,7 @@ class Map:
 
         # Limpia el mapa anterior, eliminando todas las posiciones de drones
         self.matriz = np.zeros((self.tam, self.tam), dtype=int)
+        self.drones = {}  # Limpiamos el diccionario de drones
 
         # Actualiza el mapa con las nuevas posiciones de los drones
         for position, drone_id in drone_data:
@@ -71,17 +72,20 @@ class Map:
 
         # Vuelve a dibujar solo las celdas que han cambiado
         for x, y in zip(*changes):
-            # Dibuja el cuadro verde para representar el dron
-            fill_color = (0, 255, 0)
+            # Dibuja el fondo limpio (puedes ajustar el color del fondo)
+            fill_color = (0, 0, 0)  # Fondo negro en este ejemplo
             pygame.draw.rect(self.screen, fill_color, (y * 40 + 1, x * 40 + 1, 38, 38))
 
             # Dibuja el ID del dron en la casilla
             font = pygame.font.Font(None, 18)
-            drone_id = self.drones[(x, y)]
+            drone_id = self.drones.get((x, y), "")  # Usamos get para obtener el ID o una cadena vacía si no hay dron
             text = font.render(drone_id, True, (0, 0, 0))
             text_rect = text.get_rect()
             text_rect.center = (y * 40 + 20, x * 40 + 20)
             self.screen.blit(text, text_rect)
+
+        pygame.display.update()
+
 
 
 

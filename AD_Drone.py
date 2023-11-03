@@ -10,8 +10,10 @@ from confluent_kafka import Consumer, KafkaError, Producer
 import re
 import pygame
 
+clock = pygame.time.Clock()
 
-
+global drones_coordinates
+drones_coordinates=[]
 
 ID = 0 #Por defecto
 TOKEN = ""
@@ -53,6 +55,7 @@ y = None
 drone_positions = {}
 
 def consume_messages(dron_id):
+    global drones_coordinates
     consumer = Consumer(CONSUMER_CONFIG)
     consumer.subscribe([KAFKA_TOPIC])
 
@@ -129,6 +132,7 @@ def calcular_distancia(x1, y1, x2, y2):
 # Función para mover el dron hacia la posición final
 def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
     x_actual, y_actual = 0, 0  # Coordenadas iniciales del dron
+    global drones_coordinates
 
     # Define la velocidad a la que se mueve el dron (puedes ajustarla)
     velocidad = 1
@@ -137,6 +141,7 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
 
     while (x_actual, y_actual) != (x_destino, y_destino):
         # Calcula el desplazamiento en x e y para avanzar hacia el destino
+        drones_coordinates=[((x_actual,y_actual),drone_id)]
         if x_actual < x_destino:
             x_actual += velocidad
         elif x_actual > x_destino:
@@ -147,10 +152,11 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
         elif y_actual > y_destino:
             y_actual -= velocidad
 
-        time.sleep(1)
+        time.sleep(4)
         # Actualiza la posición del dron en el diccionario
         drone_positions[drone_id] = (x_actual, y_actual)
-        time.sleep(1)
+        
+        drones_coordinates=[((x_actual,y_actual),drone_id)]
         print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}")
 
         #drone_positions = [((1, 1), "Dron1")]
@@ -299,6 +305,7 @@ def darse_de_baja(opcion):
 # Menú principal
 
 def main_game_loop():
+    global drones_coordinates
 
     running = True
     while running:
@@ -307,11 +314,14 @@ def main_game_loop():
                 running = False
             my_map.display_map()
 
+
         # Actualiza el mapa con las posiciones de los drones
-        
+        my_map.update_drones(drones_coordinates)
 
         # Actualiza la pantalla
         pygame.display.flip()
+
+        clock.tick(60)
 
 # Función para ejecutar el bucle del mapa en un hilo separado
 def game_loop_thread():
@@ -380,6 +390,8 @@ while True:
                 # Envía el token al servidor a través del socket
                 client.send(token.encode(FORMAT))
 
+            
+
             opcion = input("Desea mostrar el mapa?(s/n)")
             if(opcion=="s" or opcion =="S"):
                 print(f"mostrar el mapa")
@@ -400,7 +412,7 @@ while True:
             else:
                 print(f"opcion incorrecta")
 
-
+            client.send(ID.encode(FORMAT))
 
             kafka_thread = threading.Thread(target=consume_messages, args=(ID,))
             kafka_thread.daemon = True
@@ -417,9 +429,9 @@ while True:
                 x, y = position
                 print(f"ID: {dron_id}, X: {x}, Y: {y}")
 
-            position_info = drone_positions["Dron1"]
+            position_info = drone_positions[ID]
             x, y = position_info  # Desempaqueta la tupla de posición
-            print(f"Posición del dron Dron1: X: {x}, Y: {y}")
+            print(f"Posición destino del dron {ID}: X: {x}, Y: {y}")
 
 
             time.sleep(3)

@@ -155,30 +155,21 @@ ad_weather_thread.start()
 
 
 
-def autenticar_dron(conn, db_cursor):
+def autenticar_dron(conn, db_cursor, token):
     global global_drone_positions
-    msg = conn.recv(HEADER).decode(FORMAT)
-    print(msg)
-    
-    # El mensaje enviado debe ser la ID de autenticación
-    
-    # Consultar la base de datos para verificar si la ID de autenticación es válida
-    db_cursor.execute("SELECT Token FROM Dron WHERE Token=?", (msg,))
+
+    # Consulta la base de datos para verificar si el token de autenticación es válido
+    db_cursor.execute("SELECT Token FROM Dron WHERE Token=?", (token,))
     resultado = db_cursor.fetchone()
-    
-    print(resultado)
-    
-    
+
     if resultado:
         # Autenticación correcta
         print("Autenticación correcta")
         conn.send("Autenticación correcta".encode(FORMAT))
-        
         return True
-        
-        
     else:
         print("Incorrecto, expulsando dron")
+        conn.send("Autenticación incorrecta. Dron expulsado.".encode(FORMAT))
         return False
 
 
@@ -199,10 +190,9 @@ def handle_client(conn, addr):
     
     
     # Autenticar al dron
-
-    conectado=autenticar_dron(conn, db_cursor)
-    with drone_positions_lock:
-        global_drone_positions=[((0, 0), "ID")]
+    token=conn.recv(2048).decode(FORMAT)
+    conectado=autenticar_dron(conn, db_cursor,token)
+    
     
     while True:
         try:
@@ -211,6 +201,9 @@ def handle_client(conn, addr):
                 print(f"[CONEXIÓN CERRADA] Fallo al autenticar, {addr} se ha desconectado.")
                 break
             
+            ID=conn.recv(2048).decode(FORMAT)
+            with drone_positions_lock:
+                global_drone_positions=[((0, 0), ID)]
 
             if esperar_figura:
                 print("Esperando una figura para ejecutar...")
