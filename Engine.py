@@ -10,6 +10,7 @@ import pygame
 from confluent_kafka import Producer, Consumer, KafkaError
 from map import Map
 import time
+from typing import List, Tuple
 
 pygame.init()
 screen_width = 800
@@ -64,6 +65,9 @@ FIN = "FIN"
 # Configura la dirección y el puerto del servidor AD_Weather
 AD_WEATHER_SERVER = "127.0.1.1"
 AD_WEATHER_PORT = 5052
+
+
+
 
 def send_message_to_kafka_from_figuras(topic, final_positions):
     producer = Producer(PRODUCER_CONFIG)
@@ -196,6 +200,10 @@ def handle_client(conn, addr):
     
     while True:
         try:
+            # Inicia el hilo para consumir mensajes de Kafka
+            kafka_thread = threading.Thread(target=consume_messages)
+            kafka_thread.daemon = True
+            kafka_thread.start()
             
             if conectado == False:
                 print(f"[CONEXIÓN CERRADA] Fallo al autenticar, {addr} se ha desconectado.")
@@ -203,7 +211,7 @@ def handle_client(conn, addr):
             
             ID=conn.recv(2048).decode(FORMAT)
             with drone_positions_lock:
-                global_drone_positions=[((0, 0), ID)]
+                global_drone_positions=[((0, 0), ID,"moviendo")]
 
             if esperar_figura:
                 print("Esperando una figura para ejecutar...")
@@ -245,23 +253,28 @@ def consume_messages():
                     break
             payload = msg.value().decode('utf-8')
             
-            # Parsea la posición del dron desde el mensaje
+            # Parsea la posición y el estado del dron desde el mensaje
             try:
-                drone_name, x, y = payload.split(',')
+                x, y, drone_name, estado = payload.split(',')
                 x, y = int(x), int(y)
-                if drone_name in global_drone_positions:
-                    # Si el dron ya está en el diccionario, actualiza sus coordenadas
-                    global_drone_positions[drone_name] = (x, y)
-                else:
-                    # Si el dron no está en el diccionario, agrégalo
-                    global_drone_positions[drone_name] = (x, y)
-                print(f"Posición de {drone_name}: ({x}, {y})")
+                # Busca si el dron ya está en la lista por nombre
+                found = False
+                for i, drone_position in enumerate(global_drone_positions):
+                    if drone_position[1] == drone_name:
+                        global_drone_positions[i] = ((x, y), drone_name, estado)
+                        found = True
+                        break
+                if not found:
+                    # Si el dron no está en la lista, agrégalo
+                    global_drone_positions.append(((x,y),drone_name, estado))
+                print(f"Posición de {drone_name}: ({x}, {y}), Estado: {estado}")
             except ValueError:
                 print(f"Error al analizar la posición del dron: {payload}")
     except KeyboardInterrupt:
         pass
     finally:
         consumer.close()
+
 
 
 def main_game_loop():
@@ -301,10 +314,7 @@ def start():
     CONEX_ACTIVAS = threading.active_count() - 1
     print(CONEX_ACTIVAS)
     
-    # Inicia el hilo para consumir mensajes de Kafka
-    #kafka_thread = threading.Thread(target=consume_messages)
-    #kafka_thread.daemon = True
-    #kafka_thread.start()
+    
 
         
     while True:

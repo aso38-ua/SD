@@ -144,11 +144,12 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
     velocidad = 1
 
     producer = Producer(PRODUCER_CONFIG)
-    
+
+    estado = "moviendo"  # Estado inicial: moviendo
 
     while (x_actual, y_actual) != (x_destino, y_destino):
         # Calcula el desplazamiento en x e y para avanzar hacia el destino
-        drones_coordinates=[((x_actual,y_actual),drone_id,"moviendo")]
+        drones_coordinates = [((x_actual, y_actual), drone_id, estado)]
         if x_actual < x_destino:
             x_actual += velocidad
         elif x_actual > x_destino:
@@ -162,22 +163,23 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
         time.sleep(4)
         # Actualiza la posición del dron en el diccionario
         drone_positions[drone_id] = (x_actual, y_actual)
-        
-        drones_coordinates=[((x_actual,y_actual),drone_id,"moviendo")]
-        print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}")
 
-        #drone_positions = [((1, 1), "Dron1")]
+        drones_coordinates = [((x_actual, y_actual), drone_id, estado)]
+        print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}")
 
-        # Llama a la función para actualizar los drones en el mapa
-        #my_map.update_drones(drone_positions)
-
-        # Envía la nueva posición a Kafka
-        mensaje_kafka = f"{x_actual},{y_actual},{drone_id}"
+        # Envía la nueva posición y estado a Kafka
+        mensaje_kafka = f"{x_actual},{y_actual},{drone_id},{estado}"
         producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
         producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
-    print(f"Dron {drone_id} ha llegado a su destino en ({x_destino}, {y_destino})")
-    drones_coordinates=[((x_destino,y_destino),drone_id,"parado")]
+    estado = "parado"  # Estado: parado después de llegar al destino
+    drones_coordinates = [((x_destino, y_destino), drone_id, estado)]
+    print(f"Dron {drone_id} ha llegado a su destino en ({x_destino}, {y_destino}), Estado: {estado}")
+
+    mensaje_kafka = f"{x_destino},{y_destino},{drone_id},{estado}"
+    producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+    producer.flush()  # Asegura que el mensaje se envíe a Kafka
+
 
     # Función para registrar un dron
 def registrar_dron(opcion):
