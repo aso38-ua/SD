@@ -9,12 +9,18 @@ import math
 from confluent_kafka import Consumer, KafkaError, Producer
 import re
 import pygame
+import uuid
+
+
+def generate_unique_member_id():
+    unique_id = str(uuid.uuid4())  # Genera un UUID único
+    return f"dron_{unique_id}"
 
 clock = pygame.time.Clock()
 
 global drones_coordinates
 drones_coordinates=[]
-
+dron_id = generate_unique_member_id()
 ID = 0 #Por defecto
 TOKEN = ""
 KAFKA_TOPIC = "drones-positions"
@@ -23,7 +29,7 @@ KAFKA_BROKER = "127.0.0.1:9092"
 
 CONSUMER_CONFIG = {
     'bootstrap.servers': '127.0.0.1:9092',
-    'group.id': 'drones-positions',
+    'group.id': dron_id,
     'auto.offset.reset': 'earliest'
 }
 
