@@ -19,11 +19,15 @@ class Coordinate:
         self.column = column
 
 class Map:
+
+
     def __init__(self, screen):
         self.tam = 20
-        self.matriz = np.zeros((20, 20), dtype=int)
+        self.matriz = np.zeros((self.tam, self.tam), dtype=int)
         self.screen = screen
         self.drones = {}
+        self.previous_positions = {}
+        self.drones_parados = {}
 
     def display_map(self):
         square_size = 40  # Tamaño de los cuadrados
@@ -77,8 +81,28 @@ class Map:
                 self.matriz[x, y] = 1
                 self.drones[(x, y)] = (drone_id, estado)
 
+                # Verifica si el dron está "moviéndose" y tiene una posición anterior
+                if estado == "moviendo" and drone_id in self.previous_positions:
+                    prev_x, prev_y = self.previous_positions[drone_id]
+                    self.matriz[prev_x, prev_y] = 0  # Borra la posición anterior
+
+                if estado == "moviendo":
+                    self.previous_positions[drone_id] = (x, y)  # Actualiza la posición anterior
+                
+                if estado == "parado":
+                    self.drones_parados[(x, y)] = (drone_id, estado)
+                else:
+                    # Si el dron cambió de estado, elimínalo de los drones parados
+                    self.drones_parados.pop((x, y), None)
+            
+
         # Compara el mapa actual con el mapa anterior para detectar cambios
         changes = np.where(self.matriz != previous_map)
+
+        # Restaura la información de drones previa
+        for position, (drone_id, estado) in self.drones.items():
+            x, y = position
+            self.drones[(x, y)] = (drone_id, estado)
 
         # Vuelve a dibujar solo las celdas que han cambiado
         for x, y in zip(*changes):
@@ -110,7 +134,25 @@ class Map:
         pygame.display.update()
 
 
+    def draw_drones(self):
+        # Dibuja todos los drones en el mapa, utilizando self.drones y self.drones_parados
+        for (x, y), (drone_id, estado) in self.drones.items():
+            if estado == "moviendo":
+                drone_color = (255, 0, 0)  # Rojo
+            elif estado == "parado":
+                drone_color = (0, 255, 0)  # Verde
+            else:
+                drone_color = (255, 255, 255)  # Otro color
+            pygame.draw.rect(self.screen, drone_color, (y * 40 + 1, x * 40 + 1, 38, 38))
+            # Resto del código para dibujar el ID y otros detalles
 
+        # Dibuja los drones parados en verde
+        for (x, y), (drone_id, estado) in self.drones_parados.items():
+            drone_color = (0, 255, 0)  # Verde
+            pygame.draw.rect(self.screen, drone_color, (y * 40 + 1, x * 40 + 1, 38, 38))
+            # Resto del código para dibujar el ID y otros detalles
+
+        pygame.display.update()
 
 
     def clear_drones(self):
@@ -120,7 +162,7 @@ class Map:
 if __name__ == "__main__":
     pygame.init()
     screen_width = 800
-    screen_height = 600
+    screen_height = 800
     screen = pygame.display.set_mode((screen_width, screen_height))
     my_map = Map(screen)
 

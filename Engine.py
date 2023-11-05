@@ -14,7 +14,7 @@ from typing import List, Tuple
 
 pygame.init()
 screen_width = 800
-screen_height = 600
+screen_height = 800
 screen = pygame.display.set_mode((screen_width, screen_height))
 my_map = Map(screen)
 
@@ -290,6 +290,7 @@ def main_game_loop():
 
         with drone_positions_lock:
             my_map.update_drones(global_drone_positions)
+            my_map.draw_drones()
 
 
         # Actualiza la pantalla

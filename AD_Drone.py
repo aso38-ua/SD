@@ -33,6 +33,7 @@ CONSUMER_CONFIG = {
     'auto.offset.reset': 'earliest'
 }
 
+
 PRODUCER_CONFIG = {
     'bootstrap.servers': KAFKA_BROKER,
     'client.id': 'python-producer'
@@ -140,7 +141,7 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
     x_actual, y_actual = 0, 0  # Coordenadas iniciales del dron
     global drones_coordinates
 
-    # Define la velocidad a la que se mueve el dron (puedes ajustarla)
+    # Define la velocidad a la que se mueve el dron (de una casilla en una)
     velocidad = 1
 
     producer = Producer(PRODUCER_CONFIG)
@@ -149,16 +150,20 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
 
     while (x_actual, y_actual) != (x_destino, y_destino):
         # Calcula el desplazamiento en x e y para avanzar hacia el destino
-        drones_coordinates = [((x_actual, y_actual), drone_id, estado)]
-        if x_actual < x_destino:
-            x_actual += velocidad
-        elif x_actual > x_destino:
-            x_actual -= velocidad
+        distancia_x = x_destino - x_actual
+        distancia_y = y_destino - y_actual
 
-        if y_actual < y_destino:
-            y_actual += velocidad
-        elif y_actual > y_destino:
-            y_actual -= velocidad
+        if abs(distancia_x) > abs(distancia_y):
+            if distancia_x > 0:
+                x_actual += velocidad
+            else:
+                x_actual -= velocidad
+        else:
+            if distancia_y > 0:
+                y_actual += velocidad
+            else:
+                y_actual -= velocidad
+
 
         time.sleep(4)
         # Actualiza la posición del dron en el diccionario
@@ -405,7 +410,7 @@ while True:
                 print(f"mostrar el mapa")
                 pygame.init()
                 screen_width = 800
-                screen_height = 600
+                screen_height = 800
                 screen = pygame.display.set_mode((screen_width, screen_height))
                 my_map = Map(screen)
                 
