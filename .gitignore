@@ -1,0 +1,19 @@
+
+dockerfile
+context/AD_Drone.py
+context/AD_Registry.py
+context/AD_Weather.py
+context/cliente_prueba.py
+context/clima.db
+context/README.md
+context/Registro.db
+docker.tar
+docker.tgz
+context/prueba_registro.py
+context/Practica SD_AwD_2023_2024.pdf
+context/mi_basede_datos.db
+context/map.py
+context/figura.txt
+context/Engine.py
+context/drone.db
+context/clima.db.sqbpro
