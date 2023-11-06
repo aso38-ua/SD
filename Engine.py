@@ -194,44 +194,22 @@ def autenticar_dron(conn, db_cursor, token):
         conn.send("Autenticación incorrecta. Dron expulsado.".encode(FORMAT))
         return False
 
-def handle_disconnection(drone_id,x_actual,y_actual):
-    global global_drone_positions
-    x_destino=0
-    y_destino=0
-
-    velocidad = 1
-
-    estado = "desconectado"
-
+def handle_disconnection(drone_id, x_actual, y_actual):
+    global global_drone_positions, my_map
     
 
-    while (x_actual, y_actual) != (x_destino, y_destino):
-        # Calcula el desplazamiento en x e y para avanzar hacia el destino
-        distancia_x = x_destino - x_actual
-        distancia_y = y_destino - y_actual
-
-        if abs(distancia_x) > abs(distancia_y):
-            if distancia_x > 0:
-                x_actual += velocidad
-            else:
-                x_actual -= velocidad
-        else:
-            if distancia_y > 0:
-                y_actual += velocidad
-            else:
-                y_actual -= velocidad
-
-        time.sleep(4)
-        # Actualiza la posición del dron en el diccionario
-        global_drone_positions[drone_id] = (x_actual, y_actual)
-
-        global_drone_positions = [((x_actual, y_actual), drone_id, estado)]
-        print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}")
-
+    my_map.remove_drone(drone_id)
+    
     with drone_positions_lock:
-        global_drone_positions = [position for position in global_drone_positions if position[1] != drone_id]
+        # Elimina al dron de la lista utilizando pop()
+        for i, drone_position in enumerate(global_drone_positions):
+            if drone_position[1] == drone_id:
+                global_drone_positions.pop(i)
+                break
 
     print(f"Dron {drone_id} desconectado y movido a (0, 0).")
+
+    # Aquí, puedes enviar una notificación o realizar otras acciones de limpieza.
 
     
 def handle_client(conn, addr):
@@ -351,7 +329,7 @@ def consume_messages():
                             if drone_position[1] == drone_name:
                                 if estado == "desconectado":
                                     # Detener el movimiento del dron si se desconecta
-                                    #global_drone_positions[i] = ((0, 0), drone_name, estado)
+                                    global_drone_positions[i] = ((0, 0), drone_name, estado)
                                     handle_disconnection(drone_name, x, y)
                                 else:
                                     global_drone_positions[i] = ((x, y), drone_name, estado)

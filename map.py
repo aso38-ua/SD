@@ -61,7 +61,10 @@ class Map:
                     text_rect.center = (j * square_size + square_size // 2, i * square_size + square_size // 2)  # Centra el texto
                     self.screen.blit(text, text_rect)
 
-
+    def remove_drone(self, drone_id):
+        # Elimina un dron del mapa
+        if drone_id in self.drones:
+            del self.drones[drone_id]
 
     def update_drones(self, drone_data):
         # Crea una copia de la matriz actual para mantener el estado anterior del mapa
