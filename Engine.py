@@ -10,6 +10,17 @@ import pygame
 from confluent_kafka import Producer, Consumer, KafkaError
 from map import Map
 import time
+import netifaces
+
+# Nombre de la interfaz de red Ethernet, puede variar según tu sistema
+eth_interface = "eth0"  # Cambia esto al nombre correcto de tu interfaz Ethernet
+
+try:
+    SERVER = netifaces.ifaddresses(eth_interface)[netifaces.AF_INET][0]['addr']
+    print(f"La dirección IP de la interfaz Ethernet {eth_interface} es: {SERVER}")
+except (KeyError, IndexError):
+    SERVER = socket.gethostbyname(socket.gethostname())
+    print(f"No se pudo obtener la dirección IP de la interfaz Ethernet {eth_interface}")
 
 pygame.init()
 screen_width = 800
@@ -48,6 +59,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
     parser.add_argument("--port", type=int, default=5051, help="Puerto de escucha")
     parser.add_argument("--max-drones", type=int, default=10, help="Número máximo de drones a admitir")
+    parser.add_argument("--WPort",type=str,default="127.0.1.1",help="Ip de clima")
 
     return parser.parse_args()
 
@@ -56,13 +68,12 @@ PORT = args.port
 MAX_CONEXIONES = args.max_drones
 
 HEADER = 64
-SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 FIN = "FIN"
 
 # Configura la dirección y el puerto del servidor AD_Weather
-AD_WEATHER_SERVER = "127.0.1.1"
+AD_WEATHER_SERVER = args.WPort
 AD_WEATHER_PORT = 5052
 
 def send_message_to_kafka_from_figuras(topic, final_positions):

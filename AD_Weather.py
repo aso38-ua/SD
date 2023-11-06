@@ -3,10 +3,21 @@ import socket
 import threading
 import random
 import time
+import netifaces
+
+# Nombre de la interfaz de red Ethernet, puede variar según tu sistema
+eth_interface = "eth0"  # Cambia esto al nombre correcto de tu interfaz Ethernet
+
+try:
+    SERVER = netifaces.ifaddresses(eth_interface)[netifaces.AF_INET][0]['addr']
+    print(f"La dirección IP de la interfaz Ethernet {eth_interface} es: {SERVER}")
+except (KeyError, IndexError):
+    SERVER = socket.gethostbyname(socket.gethostname())
+    print(f"No se pudo obtener la dirección IP de la interfaz Ethernet {eth_interface}")
 
 HEADER = 64
 PORT = 5052
-SERVER = socket.gethostbyname(socket.gethostname())
+
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 FIN = "FIN"
