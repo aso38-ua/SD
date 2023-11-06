@@ -10,21 +10,11 @@ import pygame
 from confluent_kafka import Producer, Consumer, KafkaError
 from map import Map
 import time
-import netifaces
 
-# Nombre de la interfaz de red Ethernet, puede variar según tu sistema
-eth_interface = "eth0"  # Cambia esto al nombre correcto de tu interfaz Ethernet
-
-try:
-    SERVER = netifaces.ifaddresses(eth_interface)[netifaces.AF_INET][0]['addr']
-    print(f"La dirección IP de la interfaz Ethernet {eth_interface} es: {SERVER}")
-except (KeyError, IndexError):
-    SERVER = socket.gethostbyname(socket.gethostname())
-    print(f"No se pudo obtener la dirección IP de la interfaz Ethernet {eth_interface}")
 
 pygame.init()
 screen_width = 800
-screen_height = 600
+screen_height = 800
 screen = pygame.display.set_mode((screen_width, screen_height))
 my_map = Map(screen)
 
@@ -75,6 +65,9 @@ FIN = "FIN"
 # Configura la dirección y el puerto del servidor AD_Weather
 AD_WEATHER_SERVER = args.WPort
 AD_WEATHER_PORT = 5052
+
+
+
 
 def send_message_to_kafka_from_figuras(topic, final_positions):
     producer = Producer(PRODUCER_CONFIG)
@@ -131,6 +124,24 @@ def procesar_figuras():
 # Cargar y procesar las figuras desde el archivo "figuras.txt"
 final_positions = procesar_figuras()
 
+
+drones_que_han_llegado = set()
+total_drones_en_la_figura = 5
+
+def verificar_figura_completada():
+    return len(drones_que_han_llegado) == total_drones_en_la_figura
+
+# Función para esperar hasta que todos los drones de la figura hayan llegado
+def esperar_figura_completada():
+    while not verificar_figura_completada():
+        time.sleep(1)  # Espera 1 segundo antes de verificar nuevamente
+
+# Función para enviar la orden a los drones para regresar a la posición (0, 0)
+def enviar_orden_regreso_a_casa():
+    # Aquí debes implementar la lógica para enviar la orden a los drones
+    print("Enviando orden para que los drones regresen a la posición (0, 0)")
+
+
 # Esta función se ejecutará en un hilo separado para obtener la temperatura desde AD_Weather
 def get_temperature_from_ad_weather():
     while True:
@@ -166,38 +177,41 @@ ad_weather_thread.start()
 
 
 
-def autenticar_dron(conn, db_cursor):
+def autenticar_dron(conn, db_cursor, token):
     global global_drone_positions
-    msg = conn.recv(HEADER).decode(FORMAT)
-    print(msg)
-    
-    # El mensaje enviado debe ser la ID de autenticación
-    
-    # Consultar la base de datos para verificar si la ID de autenticación es válida
-    db_cursor.execute("SELECT Token FROM Dron WHERE Token=?", (msg,))
+
+    # Consulta la base de datos para verificar si el token de autenticación es válido
+    db_cursor.execute("SELECT Token FROM Dron WHERE Token=?", (token,))
     resultado = db_cursor.fetchone()
-    
-    print(resultado)
-    
-    
+
     if resultado:
         # Autenticación correcta
         print("Autenticación correcta")
         conn.send("Autenticación correcta".encode(FORMAT))
-        
         return True
-        
-        
     else:
         print("Incorrecto, expulsando dron")
+        conn.send("Autenticación incorrecta. Dron expulsado.".encode(FORMAT))
         return False
 
+def handle_disconnection(drone_id, x_actual, y_actual):
+    global global_drone_positions, my_map
+    
 
-# Función para verificar si el mensaje se envió correctamente
-def check_message_delivery():
-    producer.flush()
-    print("Mensaje enviado a Kafka y verificado")
+    my_map.remove_drone(drone_id)
+    
+    with drone_positions_lock:
+        # Elimina al dron de la lista utilizando pop()
+        for i, drone_position in enumerate(global_drone_positions):
+            if drone_position[1] == drone_id:
+                global_drone_positions.pop(i)
+                break
 
+    print(f"Dron {drone_id} desconectado y movido a (0, 0).")
+
+    # Aquí, puedes enviar una notificación o realizar otras acciones de limpieza.
+
+    
 def handle_client(conn, addr):
     global esperar_figura
     global global_drone_positions, my_map
@@ -210,18 +224,27 @@ def handle_client(conn, addr):
     
     
     # Autenticar al dron
-
-    conectado=autenticar_dron(conn, db_cursor)
-    with drone_positions_lock:
-        global_drone_positions=[((0, 0), "ID")]
+    token=conn.recv(2048).decode(FORMAT)
+    conectado=autenticar_dron(conn, db_cursor,token)
+    
     
     while True:
         try:
+            # Inicia el hilo para consumir mensajes de Kafka
+            kafka_thread = threading.Thread(target=consume_messages)
+            kafka_thread.daemon = True
+            kafka_thread.start()
             
             if conectado == False:
                 print(f"[CONEXIÓN CERRADA] Fallo al autenticar, {addr} se ha desconectado.")
+                enviar_estado_desconectado_a_kafka(ID)
                 break
             
+            ID=conn.recv(2048).decode(FORMAT)
+            if not ID:
+                break
+            with drone_positions_lock:
+                global_drone_positions.append(((0, 0), ID, "moviendo"))
 
             if esperar_figura:
                 print("Esperando una figura para ejecutar...")
@@ -235,20 +258,50 @@ def handle_client(conn, addr):
                         esperar_figura = False  # Deja de esperar figuras
 
 
-            conn.send("Mensaje enviado a Kafka".encode(FORMAT))
         except Exception as e:
             print(f"Error al procesar el mensaje: {e}")
             break
 
     print(f"ADIOS. TE ESPERO EN OTRA OCASIÓN [{addr}]")
     try:
-        conn.close()
+        
+        found = False
+        drone_position = None
+        with drone_positions_lock:
+            for position in global_drone_positions:
+                if position[1] == ID:
+                    found = True
+                    drone_position = position
+                    break
+
+        if found:
+            (x_actual, y_actual), _, _ = drone_position
+            enviar_estado_desconectado_a_kafka(ID)
+            handle_disconnection(ID, x_actual, y_actual)
+        else:
+            print(f"Dron con ID {ID} no encontrado en global_drone_positions.")
+        
     except Exception as e:
         print(f"Error al cerrar la conexión: {e}")
+    finally:
+        conn.close()
+    
+def enviar_estado_desconectado_a_kafka(id_dron):
+    estado_desconectado = "desconectado"
+    message = f"{0},{0},{id_dron},{estado_desconectado}"
+    producer.produce(KAFKA_TOPIC_SEC, key=None, value=message)
+    producer.flush()
+    print(f"Estado 'desconectado' enviado a Kafka para el dron {id_dron}")
 
 def consume_messages():
+    global global_drone_positions
     consumer = Consumer(CONSUMER_CONFIG)
     consumer.subscribe([KAFKA_TOPIC_SEC])
+
+    # Inicia el hilo para esperar la figura completada y enviar la orden de regreso
+    esperar_figura_thread = threading.Thread(target=esperar_figura_completada)
+    esperar_figura_thread.daemon = True
+    esperar_figura_thread.start()
 
     try:
         while True:
@@ -263,23 +316,53 @@ def consume_messages():
                     break
             payload = msg.value().decode('utf-8')
             
-            # Parsea la posición del dron desde el mensaje
+            # Parsea la posición y el estado del dron desde el mensaje
             try:
-                drone_name, x, y = payload.split(',')
+                x, y, drone_name, estado = payload.split(',')
                 x, y = int(x), int(y)
-                if drone_name in global_drone_positions:
-                    # Si el dron ya está en el diccionario, actualiza sus coordenadas
-                    global_drone_positions[drone_name] = (x, y)
-                else:
-                    # Si el dron no está en el diccionario, agrégalo
-                    global_drone_positions[drone_name] = (x, y)
-                print(f"Posición de {drone_name}: ({x}, {y})")
+
+                if drone_name != "DISCONNECTED":
+                    with drone_positions_lock:
+                        # Busca si el dron ya está en la lista por nombre
+                        found = False
+                        for i, drone_position in enumerate(global_drone_positions):
+                            if drone_position[1] == drone_name:
+                                if estado == "desconectado":
+                                    # Detener el movimiento del dron si se desconecta
+                                    global_drone_positions[i] = ((0, 0), drone_name, estado)
+                                    handle_disconnection(drone_name, x, y)
+                                else:
+                                    global_drone_positions[i] = ((x, y), drone_name, estado)
+                                found = True
+                                break
+
+                        if not found:
+                            if estado != "desconectado":
+                                # Si el dron no está en la lista, agrégalo
+                                global_drone_positions.append(((x, y), drone_name, estado))
+                                
+                            else:
+                                print(f"Dron {drone_name} se ha desconectado. Deteniendo movimiento.")
+                                # Puedes enviar al dron a (0, 0) y luego eliminarlo de global_drone_positions
+                                # Enviar al dron a (0, 0)...
+                                # Eliminar al dron de global_drone_positions
+                                global_drone_positions = [drone for drone in global_drone_positions if drone[1] != drone_name]
+
+                    print(f"Posición de {drone_name}: ({x}, {y}), Estado: {estado}")
+
+                if verificar_figura_completada():
+                    print("Figura completada por todos los drones.")
+                    # Espera un tiempo antes de enviar la orden de regreso
+                    time.sleep(10)  # Espera 10 segundos antes de enviar la orden
+                    enviar_orden_regreso_a_casa()
             except ValueError:
                 print(f"Error al analizar la posición del dron: {payload}")
     except KeyboardInterrupt:
         pass
     finally:
         consumer.close()
+
+
 
 
 def main_game_loop():
@@ -295,6 +378,9 @@ def main_game_loop():
 
         with drone_positions_lock:
             my_map.update_drones(global_drone_positions)
+            my_map.draw_drones()
+            # Actualiza la pantalla
+            pygame.display.flip()
 
 
         # Actualiza la pantalla
@@ -319,10 +405,7 @@ def start():
     CONEX_ACTIVAS = threading.active_count() - 1
     print(CONEX_ACTIVAS)
     
-    # Inicia el hilo para consumir mensajes de Kafka
-    #kafka_thread = threading.Thread(target=consume_messages)
-    #kafka_thread.daemon = True
-    #kafka_thread.start()
+    
 
         
     while True:
