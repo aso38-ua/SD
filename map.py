@@ -119,6 +119,8 @@ class Map:
                 drone_color = (255, 0, 0)  # Rojo
             elif estado == "parado":
                 drone_color = (0, 255, 0)
+            elif estado == "desconectado":
+                drone_color = (0, 255, 0)
             else:
                 drone_color = (255, 255, 255)  # Verde
 
@@ -141,18 +143,33 @@ class Map:
                 drone_color = (255, 0, 0)  # Rojo
             elif estado == "parado":
                 drone_color = (0, 255, 0)  # Verde
+            elif estado == "desconectado":
+                drone_color = (0, 255, 0)
             else:
                 drone_color = (255, 255, 255)  # Otro color
             pygame.draw.rect(self.screen, drone_color, (y * 40 + 1, x * 40 + 1, 38, 38))
-            # Resto del código para dibujar el ID y otros detalles
+
+            # Dibuja el ID del dron
+            font = pygame.font.Font(None, 18)  # Tamaño de fuente
+            text = font.render(drone_id, True, (0, 0, 0))  # Texto negro
+            text_rect = text.get_rect()
+            text_rect.center = (y * 40 + 20, x * 40 + 20)  # Centra el texto
+            self.screen.blit(text, text_rect)
 
         # Dibuja los drones parados en verde
         for (x, y), (drone_id, estado) in self.drones_parados.items():
             drone_color = (0, 255, 0)  # Verde
             pygame.draw.rect(self.screen, drone_color, (y * 40 + 1, x * 40 + 1, 38, 38))
-            # Resto del código para dibujar el ID y otros detalles
+
+            # Dibuja el ID del dron
+            font = pygame.font.Font(None, 18)  # Tamaño de fuente
+            text = font.render(drone_id, True, (0, 0, 0))  # Texto negro
+            text_rect = text.get_rect()
+            text_rect.center = (y * 40 + 20, x * 40 + 20)  # Centra el texto
+            self.screen.blit(text, text_rect)
 
         pygame.display.update()
+
 
 
     def clear_drones(self):

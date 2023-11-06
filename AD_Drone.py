@@ -132,9 +132,53 @@ ADDREG=(SERVERREG,PORTREG)
 ID= args.Id
 #coor=sys.argv[5]
 
-# Función para calcular la distancia euclidiana
-def calcular_distancia(x1, y1, x2, y2):
-    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+def mover_dron_a_casa(drone_id):
+    global drones_coordinates
+    x_destino, y_destino = 0, 0
+    x_actual, y_actual = drones_coordinates[0][0]  # Obtiene la posición actual del dron
+    velocidad = 1  # Velocidad de movimiento
+    
+
+    producer = Producer({'bootstrap.servers': KAFKA_BROKER})
+
+    estado = "moviendo"
+
+    while (x_actual, y_actual) != (x_destino, y_destino):
+        # Calcula el desplazamiento en x e y hacia el destino
+        distancia_x = x_destino - x_actual
+        distancia_y = y_destino - y_actual
+
+        if abs(distancia_x) > abs(distancia_y):
+            if distancia_x > 0:
+                x_actual += velocidad
+            else:
+                x_actual -= velocidad
+        else:
+            if distancia_y > 0:
+                y_actual += velocidad
+            else:
+                y_actual -= velocidad
+
+        # Actualiza la posición del dron en el diccionario
+        drones_coordinates = [((x_actual, y_actual), drone_id, estado)]
+        print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}")
+
+        # Envía la nueva posición y estado a Kafka
+        mensaje_kafka = f"{x_actual},{y_actual},{drone_id},{estado}"
+        producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+        producer.flush()  # Asegura que el mensaje se envíe a Kafka
+
+        time.sleep(4)  # Espera antes de la siguiente actualización de posición
+
+    estado = "en reposo"  # El dron llegó a casa y se encuentra en reposo
+    drones_coordinates = [((x_destino, y_destino), drone_id, estado)]
+    print(f"Dron {drone_id} ha llegado a casa en (0, 0), Estado: {estado}")
+
+    # Envía la última posición al estado de reposo a Kafka
+    mensaje_kafka = f"0,0,{drone_id},{estado}"
+    producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+    producer.flush()  # Asegura que el mensaje se envíe a Kafka
+
 
 # Función para mover el dron hacia la posición final
 def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
@@ -165,6 +209,7 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
                 y_actual -= velocidad
 
 
+
         time.sleep(4)
         # Actualiza la posición del dron en el diccionario
         drone_positions[drone_id] = (x_actual, y_actual)
@@ -185,6 +230,22 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
     producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
     producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
+###########DESCONEXIÓN DRONES###################
+
+def send_disconnection_notification_to_engine(client):
+    try:
+        # Envia una notificación de desconexión al engine
+        client.send("DISCONNECTED".encode(FORMAT))
+    except Exception as e:
+        print(f"Error al enviar notificación de desconexión: {e}")
+        client.close()
+    finally:
+        # Cierra la conexión con el engine
+        client.close()
+
+################################################
+
+##################FUNCIONES REGISTRO##################
 
     # Función para registrar un dron
 def registrar_dron(opcion):
@@ -316,7 +377,9 @@ def darse_de_baja(opcion):
 
     print("Dado de baja con éxito!")
 
-# Menú principal
+############################################################################
+
+####################Menú principal########################################
 
 def main_game_loop():
     global drones_coordinates
@@ -341,128 +404,137 @@ def game_loop_thread():
     while True:
         main_game_loop()
 
+##############################################################################
+
 #Aqui me tiene que pasar alberto algo para que el dron deje de funcionar por la temperatura
+
 while True:
+    try:
+        drone_conectado=False
+        print("Menú Principal:")
+        print("1. Registrar dron")
+        print("2. Unirse al espectáculo")
+        print("3. Salir")
+        opcion = input("Elija una opción: ")
 
-    print("Menú Principal:")
-    print("1. Registrar dron")
-    print("2. Unirse al espectáculo")
-    print("3. Salir")
-    opcion = input("Elija una opción: ")
-
-    if opcion == "1":
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.connect(ADDREG)
-        print(f"Establecida conexión en {ADDREG}")
-        # Submenú para opciones relacionadas con el dron
-        while True:
-            print("\nSubmenú del Dron:")
-            print("1. Darse de alta")
-            print("2. Editar perfil")
-            print("3. Darse de baja")
-            print("4. Volver al menú principal")
-            sub_opcion = input("Elija una opción: ")
-            if sub_opcion == "1":
-                print(f"UWU")
-                
-                registrar_dron(sub_opcion)
-                break
-            elif sub_opcion == "2":
-                
-                
-                editar_perfil(sub_opcion)
-                break
-            elif sub_opcion == "3":
-                
-                print(f"Establecida conexión en {ADDREG}")
-                darse_de_baja(sub_opcion)
-            elif sub_opcion=="4":
-                break
-            else:
-                print("Opción no válida. Por favor, elija una opción válida.")
-
-    elif opcion == "2":
-        print("Unirse al espectáculo...")
-        conexion = sqlite3.connect('drone.db')
-
-        # Crear un cursor
-        cursor = conexion.cursor()
-        db_cursor = conexion.cursor()
-        if id_existe(ID,cursor):
+        if opcion == "1":
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.connect(ADDRENG)
+            client.connect(ADDREG)
+            print(f"Establecida conexión en {ADDREG}")
+            # Submenú para opciones relacionadas con el dron
+            while True:
+                print("\nSubmenú del Dron:")
+                print("1. Darse de alta")
+                print("2. Editar perfil")
+                print("3. Darse de baja")
+                print("4. Volver al menú principal")
+                sub_opcion = input("Elija una opción: ")
+                if sub_opcion == "1":
+                    
+                    registrar_dron(sub_opcion)
+                    break
+                elif sub_opcion == "2":
+                    
+                    
+                    editar_perfil(sub_opcion)
+                    break
+                elif sub_opcion == "3":
+                    
+                    print(f"Establecida conexión en {ADDREG}")
+                    darse_de_baja(sub_opcion)
+                elif sub_opcion=="4":
+                    break
+                else:
+                    print("Opción no válida. Por favor, elija una opción válida.")
 
-            print(ID)
-            db_cursor.execute("SELECT token FROM drone WHERE id=?", (ID,))
-            resultado = db_cursor.fetchone()
-            
-            if resultado:
-                # Obtiene el token de la consulta
-                token = resultado[0]
-                
-                # Envía el token al servidor a través del socket
-                client.send(token.encode(FORMAT))
+        elif opcion == "2":
+            if not drone_conectado:  # Verifica si el dron ya está conectado
+                print("Unirse al espectáculo...")
+                conexion = sqlite3.connect('drone.db')
 
-            
+                # Crear un cursor
+                cursor = conexion.cursor()
+                db_cursor = conexion.cursor()
+                if id_existe(ID, cursor):
+                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    client.connect(ADDRENG)
 
-            opcion = input("Desea mostrar el mapa?(s/n)")
-            if(opcion=="s" or opcion =="S"):
-                print(f"mostrar el mapa")
-                pygame.init()
-                screen_width = 800
-                screen_height = 800
-                screen = pygame.display.set_mode((screen_width, screen_height))
-                my_map = Map(screen)
-                
-                # Inicia el hilo para el bucle del mapa
-                game_thread = threading.Thread(target=game_loop_thread)
-                game_thread.daemon = True
-                game_thread.start()
+                    print(ID)
+                    db_cursor.execute("SELECT token FROM drone WHERE id=?", (ID,))
+                    resultado = db_cursor.fetchone()
 
-            elif(opcion =="n" or opcion=="N"):
-                print(f"no mostrar el mapa")
+                    if resultado:
+                        # Obtiene el token de la consulta
+                        token = resultado[0]
 
+                        # Envía el token al servidor a través del socket
+                        client.send(token.encode(FORMAT))
+
+                    opcion = input("Desea mostrar el mapa?(s/n)")
+                    if (opcion == "s" or opcion == "S"):
+                        print(f"mostrar el mapa")
+                        pygame.init()
+                        screen_width = 800
+                        screen_height = 800
+                        screen = pygame.display.set_mode((screen_width, screen_height))
+                        my_map = Map(screen)
+
+                        # Inicia el hilo para el bucle del mapa
+                        game_thread = threading.Thread(target=game_loop_thread)
+                        game_thread.daemon = True
+                        game_thread.start()
+
+                    elif (opcion == "n" or opcion == "N"):
+                        print(f"no mostrar el mapa")
+
+                    else:
+                        print(f"Opcion incorrecta")
+
+                    client.send(ID.encode(FORMAT))
+
+                    kafka_thread = threading.Thread(target=consume_messages, args=(ID,))
+                    kafka_thread.daemon = True
+                    kafka_thread.start()
+
+                    print(f"Establecida conexión en {ADDRENG}")
+
+                    while not drone_positions:
+                        time.sleep(1)  # Espera 1 segundo antes de verificar nuevamente
+
+                    print("Contenido de drone_positions:")
+                    for dron_id, position in drone_positions.items():
+                        x, y = position
+                        print(f"ID: {dron_id}, X: {x}, Y: {y}")
+
+                    position_info = drone_positions[ID]
+                    x, y = position_info  # Desempaqueta la tupla de posición
+                    print(f"Posición destino del dron {ID}: X: {x}, Y: {y}")
+
+                    time.sleep(3)
+
+                    mover_dron_hacia_destino(ID, x, y)
+
+                    drone_conectado = True  # Marcar el dron como conectado
+                else:
+                    print(f"No estás registrado {ID}")
             else:
-                print(f"opcion incorrecta")
+                print("El dron ya está conectado.")
 
-            client.send(ID.encode(FORMAT))
-
-            kafka_thread = threading.Thread(target=consume_messages, args=(ID,))
-            kafka_thread.daemon = True
-            kafka_thread.start()
-            
-            print(f"Establecida conexión en {ADDRENG}")
-            
-            while not drone_positions:
-                time.sleep(1)  # Espera 1 segundo antes de verificar nuevamente
-            
-
-            print("Contenido de drone_positions:")
-            for dron_id, position in drone_positions.items():
-                x, y = position
-                print(f"ID: {dron_id}, X: {x}, Y: {y}")
-
-            position_info = drone_positions[ID]
-            x, y = position_info  # Desempaqueta la tupla de posición
-            print(f"Posición destino del dron {ID}: X: {x}, Y: {y}")
-
-
-            time.sleep(3)
-
-            mover_dron_hacia_destino(ID, x, y)
+        elif opcion == "3":
+            print("Saliendo del programa. ¡Hasta luego!")
+            print("SE ACABO LO QUE SE DABA")
+            client.close()
+            break
 
         else:
-            print(f"No estás registrado {ID}")
-
-    elif opcion == "3":
-        print("Saliendo del programa. ¡Hasta luego!")
-        print("SE ACABO LO QUE SE DABA")
-        client.close()
-        break
-
-    else:
-        print("Opción no válida. Por favor, elija una opción válida.")
+            print("Opción no válida. Por favor, elija una opción válida.")
     
 
-client.close()
-#elif (PORT==5051):
+
+    except KeyboardInterrupt:
+            # Manejo de Ctrl+C (Interrupción del usuario)
+            print("Se ha presionado Ctrl+C. Saliendo...")
+            send_disconnection_notification_to_engine(client)  # Envía una notificación de desconexión al motor
+            client.close()
+            sys.exit(0)  # Sale del programa
+    #elif (PORT==5051):
