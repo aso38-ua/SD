@@ -21,7 +21,7 @@ clock = pygame.time.Clock()
 global drones_coordinates
 drones_coordinates=[]
 dron_id = generate_unique_member_id()
-ID = 0 #Por defecto
+global ID
 TOKEN = ""
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
@@ -117,7 +117,7 @@ def parse_arguments():
     parser.add_argument("--Engine", type=str, default="127.0.1.1", help="Puerto de escucha")
     parser.add_argument("--Id", type=str, help="Id del dron")
     parser.add_argument("--kafka", type=str,default="127.0.0.1", help="Dirección IP del servidor Kafka")
-    parser.add_argument("--Registry", type=str, default="127.0.1.1", help="Puerto de escucha")
+    parser.add_argument("--Registry", type=str, default="127.0.1.1", help="Direccion IP del servidor registro")
 
     return parser.parse_args()
 
@@ -279,25 +279,29 @@ def registrar_dron(opcion):
             print(f"Respuesta del servidor: {TOKEN}")
             print("Dron registrado con éxito!")
             client.close()
+            
 
         else:
             print("Ya existe el ID")
             conexion.close()
             client.close()
+            
 
     else:
         print("No se pudo registrar el dron.")
+    client.close()
 
 # Función para editar el perfil del dron
 def editar_perfil(opcion):
     print("Editando el perfil del dron...")
+    global ID
     # Aquí puedes agregar tu lógica para editar el perfil
 
     mensaje = f"{opcion},{ID}"
 
     client.send(mensaje.encode(FORMAT))
 
-    newID=input("Cual es el nuevo id que quieres?: ")
+    newID = input("Cual es el nuevo id que quieres?: ")
 
     client.send(newID.encode(FORMAT))
 
@@ -311,33 +315,30 @@ def editar_perfil(opcion):
         # Crear un cursor
         cursor = conexion.cursor()
 
-        # Insertar el nuevo registro en la tabla "drone"
-        if id_existe(newID,cursor) == False:
+        try:
             cursor.execute("UPDATE drone SET id = ? WHERE id = ?;", (newID, ID))
-
-            # Guardar los cambios en la base de datos
             conexion.commit()
-
-            # Cerrar la conexión
-            conexion.close()
             print(f"Respuesta del servidor: {TOKEN}")
             print("Dron actualizado con éxito!")
-            ID=newID
-            client.close()
-
-        else:
-            print("Ya existe el ID")
+            ID = newID
+        except sqlite3.IntegrityError:
+            print("Error: Ya existe un dron con este ID. Por favor, elige un ID diferente.")
+        except Exception as e:
+            print(f"Error al actualizar el valor en la base de datos: {e}")
+        finally:
             conexion.close()
             client.close()
 
     else:
         print("No se pudo actualizar el dron.")
-        client.close()
+    
+    client.close()
 
 
 # Función para darse de baja
 def darse_de_baja(opcion):
     print("Dándose de baja...")
+    global ID
     
     mensaje = f"{opcion},{ID}"
 

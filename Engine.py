@@ -10,6 +10,28 @@ import pygame
 from confluent_kafka import Producer, Consumer, KafkaError
 from map import Map
 import time
+import netifaces
+
+
+interfaces = netifaces.interfaces()
+
+if interfaces:
+    # Utiliza la primera interfaz de red disponible
+    interface = interfaces[0]
+    addrs = netifaces.ifaddresses(interface).get(netifaces.AF_INET)
+    if addrs:
+        # Se encontró una interfaz con una dirección IPv4
+        SERVER = addrs[0]['addr']
+        print(f"La dirección IP de la interfaz {interface} es: {SERVER}")
+    else:
+        # No se encontraron interfaces con direcciones IPv4
+        print("No se pudo obtener la dirección IP de ninguna interfaz de red.")
+else:
+    # No se encontraron interfaces de red
+    print("No se encontraron interfaces de red disponibles.")
+    SERVER = socket.gethostbyname(socket.gethostname())
+
+print(f"La dirección IP seleccionada es: {SERVER}")
 
 
 pygame.init()
@@ -18,7 +40,7 @@ screen_height = 800
 screen = pygame.display.set_mode((screen_width, screen_height))
 my_map = Map(screen)
 
-global global_drone_positions
+global global_drone_positions,temperature
 global_drone_positions=[]
 # Define un cerrojo para sincronizar el acceso a global_drone_positions
 drone_positions_lock = threading.Lock()
@@ -97,6 +119,7 @@ def procesar_figuras():
                 lineas = figuras.strip().split('\n')
                 # Inicializa la lista de posiciones de los drones
                 final_positions = []
+                total_drones = 0
                 for linea in lineas[1:-1]:  # Ignorar la primera y última línea
                     campos = linea.split()
                     if len(campos) == 3:  # Verificar que hay cuatro campos
@@ -105,10 +128,12 @@ def procesar_figuras():
                         y_destino = int(campos[2])
                         # Agrega la posición del dron en el formato correcto
                         final_positions.append(((x_destino, y_destino), id_dron))
+                        total_drones += 1
                         print(f"Figura procesada para dron {id_dron}: Moviendo a ({x_destino}, {y_destino})")
                 send_message_to_kafka_from_figuras(KAFKA_TOPIC, final_positions)
                 print("Figuras procesadas")
-                return final_positions
+                return final_positions, total_drones
+                
             else:
                 print("El archivo de figuras está vacío.")
                 return []  # Retorna una lista vacía si no hay figuras en el archivo
@@ -121,12 +146,13 @@ def procesar_figuras():
     
 
 
-# Cargar y procesar las figuras desde el archivo "figuras.txt"
-final_positions = procesar_figuras()
+final_positions, total_drones_en_la_figura = procesar_figuras()
+
+print(f"Total de drones en la figura: {total_drones_en_la_figura}")
 
 
 drones_que_han_llegado = set()
-total_drones_en_la_figura = 5
+
 
 def verificar_figura_completada():
     return len(drones_que_han_llegado) == total_drones_en_la_figura
@@ -144,6 +170,7 @@ def enviar_orden_regreso_a_casa():
 
 # Esta función se ejecutará en un hilo separado para obtener la temperatura desde AD_Weather
 def get_temperature_from_ad_weather():
+    global temperature
     while True:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ad_weather_socket:
             try:
