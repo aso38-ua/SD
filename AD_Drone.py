@@ -25,6 +25,7 @@ global ID
 TOKEN = ""
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
+KAFKA_TOPIC_ORDERS= "dron-back"
 KAFKA_BROKER = "127.0.0.1:9092"
 
 CONSUMER_CONFIG = {
@@ -114,7 +115,7 @@ def id_existe(id, db_cursor):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
-    parser.add_argument("--Engine", type=str, default="127.0.1.1", help="Puerto de escucha")
+    parser.add_argument("--Engine", type=str, default="127.0.0.1", help="Puerto de escucha")
     parser.add_argument("--Id", type=str, help="Id del dron")
     parser.add_argument("--kafka", type=str,default="127.0.0.1", help="Dirección IP del servidor Kafka")
     parser.add_argument("--Registry", type=str, default="127.0.1.1", help="Direccion IP del servidor registro")
@@ -132,6 +133,81 @@ ADDREG=(SERVERREG,PORTREG)
 ID= args.Id
 #coor=sys.argv[5]
 
+# Define un semáforo
+movimiento_semaphore = threading.Semaphore()
+orden_semaphore = threading.Semaphore()
+
+def esperar_ordenes():
+    consumer = Consumer(CONSUMER_CONFIG)
+    consumer.subscribe([KAFKA_TOPIC_ORDERS])
+
+    while True:
+
+        message = consumer.poll(1.0)  # Espera a recibir un mensaje por un segundo
+        if message is None:
+            continue
+        if message.error():
+            if message.error().code() == KafkaError._PARTITION_EOF:
+                print('No se encontraron más mensajes')
+            else:
+                print(f'Error al recibir mensaje: {message.error()}')
+        else:
+            payload = message.value().decode('utf-8')
+            if payload == 'Regresar a casa':
+                movimiento_semaphore.acquire()
+                mover_drones_a_casa()
+                movimiento_semaphore.release()
+            elif payload == 'Todo OK':
+                continue
+
+def mover_drones_a_casa():
+    global drones_coordinates
+
+    producer = Producer(PRODUCER_CONFIG)
+
+    x_destino, y_destino = 0, 0  # Posición de destino (casa)
+    velocidad = 1  # Velocidad de movimiento
+
+    for i, (coordenadas, drone_id, estado) in enumerate(drones_coordinates):
+        x_actual, y_actual = coordenadas  # Obtiene la posición actual del dron
+
+        estado = "moviendo"
+        while (x_actual, y_actual) != (x_destino, y_destino):
+            # Calcula el desplazamiento en x e y hacia el destino
+            distancia_x = x_destino - x_actual
+            distancia_y = y_destino - y_actual
+
+            if abs(distancia_x) > abs(distancia_y):
+                if distancia_x > 0:
+                    x_actual += velocidad
+                else:
+                    x_actual -= velocidad
+            else:
+                if distancia_y > 0:
+                    y_actual += velocidad
+                else:
+                    y_actual -= velocidad
+
+            # Actualiza la posición del dron en la lista
+            drones_coordinates[i] = ((x_actual, y_actual), drone_id, estado)
+            print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}")
+
+            # Envía la nueva posición y estado a Kafka
+            mensaje_kafka = f"{x_actual},{y_actual},{drone_id},{estado}"
+            producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+            producer.flush()  # Asegura que el mensaje se envíe a Kafka
+
+            time.sleep(4)  # Espera antes de la siguiente actualización de posición
+
+        estado = "en reposo"  # El dron llegó a casa y se encuentra en reposo
+        drones_coordinates = [((x_destino, y_destino), drone_id, estado)]
+        print(f"Dron {drone_id} ha llegado a casa en (0, 0), Estado: {estado}")
+
+        # Envía la última posición al estado de reposo a Kafka
+        mensaje_kafka = f"0,0,{drone_id},{estado}"
+        producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+        producer.flush()  # Asegura que el mensaje se envíe a Kafka
+
 def mover_dron_a_casa(drone_id):
     global drones_coordinates
     x_destino, y_destino = 0, 0
@@ -139,7 +215,7 @@ def mover_dron_a_casa(drone_id):
     velocidad = 1  # Velocidad de movimiento
     
 
-    producer = Producer({'bootstrap.servers': KAFKA_BROKER})
+    producer = Producer(PRODUCER_CONFIG)
 
     estado = "moviendo"
 
@@ -179,63 +255,77 @@ def mover_dron_a_casa(drone_id):
     producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
     producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
-
+global drones_en_destino
+drones_en_destino=0
 # Función para mover el dron hacia la posición final
 def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
-    x_actual, y_actual = 0, 0  # Coordenadas iniciales del dron
-    global drones_coordinates
+    
+        try:
 
-    # Define la velocidad a la que se mueve el dron (de una casilla en una)
-    velocidad = 1
+            x_actual, y_actual = 0, 0  # Coordenadas iniciales del dron
+            global drones_coordinates,drones_en_destino
 
-    producer = Producer(PRODUCER_CONFIG)
+            # Define la velocidad a la que se mueve el dron (de una casilla en una)
+            velocidad = 1
 
-    estado = "moviendo"  # Estado inicial: moviendo
+            producer = Producer(PRODUCER_CONFIG)
 
-    while (x_actual, y_actual) != (x_destino, y_destino):
-        # Calcula el desplazamiento en x e y para avanzar hacia el destino
-        distancia_x = x_destino - x_actual
-        distancia_y = y_destino - y_actual
+            estado = "moviendo"  # Estado inicial: moviendo
 
-        if abs(distancia_x) > abs(distancia_y):
-            if distancia_x > 0:
-                x_actual += velocidad
-            else:
-                x_actual -= velocidad
-        else:
-            if distancia_y > 0:
-                y_actual += velocidad
-            else:
-                y_actual -= velocidad
+            # Adquiere el semáforo para bloquear otras llamadas a esta función
+            with movimiento_semaphore:
+                while (x_actual, y_actual) != (x_destino, y_destino):
+                    # Calcula el desplazamiento en x e y para avanzar hacia el destino
+                    distancia_x = x_destino - x_actual
+                    distancia_y = y_destino - y_actual
 
+                    if abs(distancia_x) > abs(distancia_y):
+                        if distancia_x > 0:
+                            x_actual += velocidad
+                        else:
+                            x_actual -= velocidad
+                    else:
+                        if distancia_y > 0:
+                            y_actual += velocidad
+                        else:
+                            y_actual -= velocidad
 
+                    time.sleep(4)
+                    # Actualiza la posición del dron en el diccionario
+                    drone_positions[drone_id] = (x_actual, y_actual)
 
-        time.sleep(4)
-        # Actualiza la posición del dron en el diccionario
-        drone_positions[drone_id] = (x_actual, y_actual)
+                    drones_coordinates = [((x_actual, y_actual), drone_id, estado)]
+                    print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}")
 
-        drones_coordinates = [((x_actual, y_actual), drone_id, estado)]
-        print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}")
+                    # Envía la nueva posición y estado a Kafka
+                    mensaje_kafka = f"{x_actual},{y_actual},{drone_id},{estado}"
+                    producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+                    producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
-        # Envía la nueva posición y estado a Kafka
-        mensaje_kafka = f"{x_actual},{y_actual},{drone_id},{estado}"
-        producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
-        producer.flush()  # Asegura que el mensaje se envíe a Kafka
+                estado = "parado"  # Estado: parado después de llegar al destino
+                drones_coordinates = [((x_destino, y_destino), drone_id, estado)]
+                print(f"Dron {drone_id} ha llegado a su destino en ({x_destino}, {y_destino}), Estado: {estado}")
+                
 
-    estado = "parado"  # Estado: parado después de llegar al destino
-    drones_coordinates = [((x_destino, y_destino), drone_id, estado)]
-    print(f"Dron {drone_id} ha llegado a su destino en ({x_destino}, {y_destino}), Estado: {estado}")
+                mensaje_kafka = f"{x_destino},{y_destino},{drone_id},{estado}"
+                producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
+                producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
-    mensaje_kafka = f"{x_destino},{y_destino},{drone_id},{estado}"
-    producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
-    producer.flush()  # Asegura que el mensaje se envíe a Kafka
+                #drones_en_destino+=1
+                #mensaje_drones_en_destino = f"Drones en destino: {drones_en_destino}"
+                #producer.produce(KAFKA_TOPIC_SEC, key=None, value=mensaje_drones_en_destino)
+                #producer.flush()
+        finally:
+            # Libera el semáforo después de completar el movimiento
+            movimiento_semaphore.release()
 
 ###########DESCONEXIÓN DRONES###################
 
-def send_disconnection_notification_to_engine(client):
+def send_disconnection_notification_to_engine(client,drone_id):
     try:
         # Envia una notificación de desconexión al engine
-        client.send("DISCONNECTED".encode(FORMAT))
+        message = f"DISCONNECTED:{drone_id}"
+        client.send(message.encode(FORMAT))
     except Exception as e:
         print(f"Error al enviar notificación de desconexión: {e}")
         client.close()
@@ -497,6 +587,10 @@ while True:
                     kafka_thread.daemon = True
                     kafka_thread.start()
 
+                    kafka_thread = threading.Thread(target=esperar_ordenes)
+                    kafka_thread.daemon = True
+                    kafka_thread.start()
+
                     print(f"Establecida conexión en {ADDRENG}")
 
                     while not drone_positions:
@@ -512,7 +606,6 @@ while True:
                     print(f"Posición destino del dron {ID}: X: {x}, Y: {y}")
 
                     time.sleep(3)
-
                     mover_dron_hacia_destino(ID, x, y)
 
                     drone_conectado = True  # Marcar el dron como conectado
@@ -535,7 +628,7 @@ while True:
     except KeyboardInterrupt:
             # Manejo de Ctrl+C (Interrupción del usuario)
             print("Se ha presionado Ctrl+C. Saliendo...")
-            send_disconnection_notification_to_engine(client)  # Envía una notificación de desconexión al motor
+            send_disconnection_notification_to_engine(client,ID)  # Envía una notificación de desconexión al motor
             client.close()
             sys.exit(0)  # Sale del programa
     #elif (PORT==5051):

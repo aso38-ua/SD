@@ -48,6 +48,7 @@ drone_positions_lock = threading.Lock()
 KAFKA_BROKER = "127.0.0.1:9092"
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
+KAFKA_TOPIC_ORDERS= "dron-back"
 PRODUCER_CONFIG = {
     'bootstrap.servers': KAFKA_BROKER,
     'client.id': 'python-producer'
@@ -70,8 +71,8 @@ esperar_figura = False
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
     parser.add_argument("--port", type=int, default=5051, help="Puerto de escucha")
-    parser.add_argument("--max-drones", type=int, default=10, help="Número máximo de drones a admitir")
-    parser.add_argument("--WPort",type=str,default="127.0.1.1",help="Ip de clima")
+    parser.add_argument("--max-drones", type=int, default=30, help="Número máximo de drones a admitir")
+    parser.add_argument("--WIp",type=str,default="10.0.2.15",help="Ip de clima")
 
     return parser.parse_args()
 
@@ -85,7 +86,7 @@ FORMAT = 'utf-8'
 FIN = "FIN"
 
 # Configura la dirección y el puerto del servidor AD_Weather
-AD_WEATHER_SERVER = args.WPort
+AD_WEATHER_SERVER = args.WIp
 AD_WEATHER_PORT = 5052
 
 
@@ -151,11 +152,13 @@ final_positions, total_drones_en_la_figura = procesar_figuras()
 print(f"Total de drones en la figura: {total_drones_en_la_figura}")
 
 
-drones_que_han_llegado = set()
+global drones_que_han_llegado
+drones_que_han_llegado = 0
 
 
 def verificar_figura_completada():
-    return len(drones_que_han_llegado) == total_drones_en_la_figura
+
+    return drones_que_han_llegado == total_drones_en_la_figura
 
 # Función para esperar hasta que todos los drones de la figura hayan llegado
 def esperar_figura_completada():
@@ -166,6 +169,7 @@ def esperar_figura_completada():
 def enviar_orden_regreso_a_casa():
     # Aquí debes implementar la lógica para enviar la orden a los drones
     print("Enviando orden para que los drones regresen a la posición (0, 0)")
+    
 
 
 # Esta función se ejecutará en un hilo separado para obtener la temperatura desde AD_Weather
@@ -185,14 +189,30 @@ def get_temperature_from_ad_weather():
                     if not data:
                         pass
 
-                    temperature = data.decode('utf-8')
+                    temperature = float(data.decode('utf-8'))
                     print(f"Temperatura actual: {temperature}°C")
+
+                    if temperature<0:
+                        mensaje = "Regresar a casa"
+                        producer = Producer(PRODUCER_CONFIG)
+                        producer.produce(KAFKA_TOPIC_ORDERS, key=None, value=mensaje)
+                        producer.flush()
+
+                    else:
+                        mensaje = "Todo OK"
+                        producer = Producer(PRODUCER_CONFIG)
+                        producer.produce(KAFKA_TOPIC_ORDERS, key=None, value=mensaje)
+                        producer.flush()
                     
                     # Espera un período antes de obtener una actualización
                     time.sleep(60)  # Espera 60 segundos antes de obtener la próxima actualización
                     
             except ConnectionRefusedError:
                 print("No se pudo conectar al servidor AD_Weather. Intentando de nuevo en 30 segundos.")
+                mensaje = "Todo OK"
+                producer = Producer(PRODUCER_CONFIG)
+                producer.produce(KAFKA_TOPIC_ORDERS, key=None, value=mensaje)
+                producer.flush()
                 time.sleep(30)
             except Exception as e:
                 print(f"Error al obtener la temperatura: {e}")
@@ -222,21 +242,23 @@ def autenticar_dron(conn, db_cursor, token):
         return False
 
 def handle_disconnection(drone_id, x_actual, y_actual):
-    global global_drone_positions, my_map
-    
+    global global_drone_positions, my_map, drones_que_han_llegado
 
     my_map.remove_drone(drone_id)
-    
+
     with drone_positions_lock:
-        # Elimina al dron de la lista utilizando pop()
-        for i, drone_position in enumerate(global_drone_positions):
-            if drone_position[1] == drone_id:
-                global_drone_positions.pop(i)
-                break
+        try:
+            # Busca al dron en la lista y elimínalo si lo encuentras
+            drone_position = next(d for d in global_drone_positions if d[1] == drone_id)
+            global_drone_positions.remove(drone_position)
+            print(f"Dron {drone_id} desconectado y movido a (0, 0).")
 
-    print(f"Dron {drone_id} desconectado y movido a (0, 0).")
+            # Si el dron desconectado estaba en estado "parado," reduce la cuenta de drones en destino
+            if drone_position[2] == "parado":
+                drones_que_han_llegado -= 1
 
-    # Aquí, puedes enviar una notificación o realizar otras acciones de limpieza.
+        except StopIteration:
+            print(f"Dron {drone_id} no encontrado en la lista.")
 
     
 def handle_client(conn, addr):
@@ -321,7 +343,7 @@ def enviar_estado_desconectado_a_kafka(id_dron):
     print(f"Estado 'desconectado' enviado a Kafka para el dron {id_dron}")
 
 def consume_messages():
-    global global_drone_positions
+    global global_drone_positions,drones_que_han_llegado
     consumer = Consumer(CONSUMER_CONFIG)
     consumer.subscribe([KAFKA_TOPIC_SEC])
 
@@ -367,6 +389,8 @@ def consume_messages():
                             if estado != "desconectado":
                                 # Si el dron no está en la lista, agrégalo
                                 global_drone_positions.append(((x, y), drone_name, estado))
+                                if estado == "parado":
+                                    drones_que_han_llegado += 1
                                 
                             else:
                                 print(f"Dron {drone_name} se ha desconectado. Deteniendo movimiento.")
@@ -380,6 +404,7 @@ def consume_messages():
                 if verificar_figura_completada():
                     print("Figura completada por todos los drones.")
                     # Espera un tiempo antes de enviar la orden de regreso
+                    esperar_figura = False
                     time.sleep(10)  # Espera 10 segundos antes de enviar la orden
                     enviar_orden_regreso_a_casa()
             except ValueError:

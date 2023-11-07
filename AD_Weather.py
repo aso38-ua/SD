@@ -5,25 +5,28 @@ import random
 import time
 import netifaces
 
-interfaces = netifaces.interfaces()
+def get_first_non_local_interface():
+    interfaces = netifaces.interfaces()
+    
+    for interface in interfaces:
+        addrs = netifaces.ifaddresses(interface).get(netifaces.AF_INET, [])
+        
+        for addr_info in addrs:
+            ip = addr_info.get('addr')
+            if ip and not ip.startswith('127.'):
+                return ip
+    
+    return None
 
-if interfaces:
-    # Utiliza la primera interfaz de red disponible
-    interface = interfaces[0]
-    addrs = netifaces.ifaddresses(interface).get(netifaces.AF_INET)
-    if addrs:
-        # Se encontró una interfaz con una dirección IPv4
-        SERVER = addrs[0]['addr']
-        print(f"La dirección IP de la interfaz {interface} es: {SERVER}")
-    else:
-        # No se encontraron interfaces con direcciones IPv4
-        print("No se pudo obtener la dirección IP de ninguna interfaz de red.")
+eth_interface = get_first_non_local_interface()
+
+if eth_interface:
+    SERVER = eth_interface
+    print(f"La dirección IP de la interfaz de red no local es: {SERVER}")
 else:
-    # No se encontraron interfaces de red
-    print("No se encontraron interfaces de red disponibles.")
+    print("No se pudo encontrar una interfaz de red no local.")
     SERVER = socket.gethostbyname(socket.gethostname())
-
-print(f"La dirección IP seleccionada es: {SERVER}")
+    print(f"Usando la dirección IP del host: {SERVER}")
 
 HEADER = 64
 PORT = 5052

@@ -63,8 +63,8 @@ class Map:
 
     def remove_drone(self, drone_id):
         # Elimina un dron del mapa
-        if drone_id in self.drones:
-            del self.drones[drone_id]
+        self.drones = [dron for dron in self.drones if dron[1] != drone_id]
+
 
     def update_drones(self, drone_data):
         # Crea una copia de la matriz actual para mantener el estado anterior del mapa
@@ -197,6 +197,7 @@ if __name__ == "__main__":
         my_map.clear_drones()  # Borra las posiciones anteriores
         my_map.update_drones(drone_positions)  # Actualiza las nuevas posiciones
         my_map.display_map()
+        my_map.remove_drone("Dron1")
         pygame.display.flip()
 
     pygame.quit()
