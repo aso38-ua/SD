@@ -49,6 +49,7 @@ KAFKA_BROKER = "127.0.0.1:9092"
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
 KAFKA_TOPIC_ORDERS= "dron-back"
+KAFKA_TOPIC_ALL="drones-all-positions"
 PRODUCER_CONFIG = {
     'bootstrap.servers': KAFKA_BROKER,
     'client.id': 'python-producer'
@@ -89,7 +90,7 @@ FIN = "FIN"
 AD_WEATHER_SERVER = args.WIp
 AD_WEATHER_PORT = 5052
 
-
+connected_drones = {}
 
 
 def send_message_to_kafka_from_figuras(topic, final_positions):
@@ -194,7 +195,8 @@ def get_temperature_from_ad_weather():
                     temperature = float(data.decode('utf-8'))
                     print(f"Temperatura actual: {temperature}°C")
 
-                    if temperature<0:
+                    if temperature<=0:
+                        print("Mandando los drones a casa...")
                         mensaje = "Regresar a casa"
                         producer = Producer(PRODUCER_CONFIG)
                         producer.produce(KAFKA_TOPIC_ORDERS, key=None, value=mensaje)
@@ -262,7 +264,19 @@ def handle_disconnection(drone_id, x_actual, y_actual):
         except StopIteration:
             print(f"Dron {drone_id} no encontrado en la lista.")
 
-    
+def send_drone_positions_to_all():
+    # Crea un productor de Kafka
+    producer = Producer(PRODUCER_CONFIG)
+
+    # Itera a través de las posiciones de los drones y envía las posiciones a cada uno
+    for position in global_drone_positions:
+        (x, y), dron_id, estado = position
+        message = f"{dron_id},{x},{y},{estado}"
+        
+        # Envía la posición a través de Kafka al dron actual
+        producer.produce(KAFKA_TOPIC_ALL, key=None, value=message)
+        producer.flush()  # Asegúrate de que todos los mensajes se envíen
+
 def handle_client(conn, addr):
     global esperar_figura
     global global_drone_positions, my_map
@@ -292,6 +306,7 @@ def handle_client(conn, addr):
                 break
             
             ID=conn.recv(2048).decode(FORMAT)
+            
             if not ID:
                 break
             with drone_positions_lock:
@@ -308,6 +323,7 @@ def handle_client(conn, addr):
                         cargar_figura("")  # Borra la figura después de ejecutarla
                         esperar_figura = False  # Deja de esperar figuras
 
+            send_drone_positions_to_all()
 
         except Exception as e:
             print(f"Error al procesar el mensaje: {e}")
