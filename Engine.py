@@ -114,36 +114,38 @@ def ejecutar_figura(id_dron, x_destino, y_destino):
 def procesar_figuras():
     try:
         with open(archivo_figura, "r") as file:
-            figuras = file.read()
-            if figuras:
-                print(f"Se encontraron figuras para ejecutar:\n{figuras}")
-                lineas = figuras.strip().split('\n')
-                # Inicializa la lista de posiciones de los drones
-                final_positions = []
-                total_drones = 0
-                for linea in lineas[1:-1]:  # Ignorar la primera y última línea
-                    campos = linea.split()
-                    if len(campos) == 3:  # Verificar que hay cuatro campos
-                        id_dron = campos[0]
-                        x_destino = int(campos[1])
-                        y_destino = int(campos[2])
-                        # Agrega la posición del dron en el formato correcto
-                        final_positions.append(((x_destino, y_destino), id_dron))
-                        total_drones += 1
-                        print(f"Figura procesada para dron {id_dron}: Moviendo a ({x_destino}, {y_destino})")
-                send_message_to_kafka_from_figuras(KAFKA_TOPIC, final_positions)
-                print("Figuras procesadas")
-                return final_positions, total_drones
+            data = json.load(file)
+            figuras = data.get("figuras", [])
+            if not figuras:
+                print("No se encontraron figuras en el archivo.")
+                return []
+
+            final_positions = []
+            total_drones = 0
+
+            for figura in figuras:
+                nombre_figura = figura.get("Nombre")
+                drones = figura.get("Drones", [])
                 
-            else:
-                print("El archivo de figuras está vacío.")
-                return []  # Retorna una lista vacía si no hay figuras en el archivo
+                for dron in drones:
+                    id_dron = dron.get("ID")
+                    pos = dron.get("POS")
+                    x_destino, y_destino = map(int, pos.split(','))
+
+                    final_positions.append(((x_destino, y_destino), id_dron))
+                    total_drones += 1
+                    print(f"Figura procesada para dron {id_dron} ({nombre_figura}): Moviendo a ({x_destino}, {y_destino})")
+
+            send_message_to_kafka_from_figuras(KAFKA_TOPIC, final_positions)
+            print("Figuras procesadas")
+            return final_positions, total_drones
     except FileNotFoundError:
         print("El archivo de figuras no se ha encontrado.")
-        return []  # Retorna una lista vacía si el archivo no se encuentra
+        return []
     except Exception as e:
         print(f"Error al procesar las figuras: {e}")
-        return []  # Retorna una lista vacía en caso de error
+        return []
+
     
 
 
