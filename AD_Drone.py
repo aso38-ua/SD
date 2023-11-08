@@ -26,6 +26,7 @@ TOKEN = ""
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
 KAFKA_TOPIC_ORDERS= "dron-back"
+KAFKA_TOPIC_ALL="drones-all-positions"
 KAFKA_BROKER = "127.0.0.1:9092"
 
 CONSUMER_CONFIG = {
@@ -333,6 +334,41 @@ def send_disconnection_notification_to_engine(client,drone_id):
         # Cierra la conexión con el engine
         client.close()
 
+
+def consume_drone_positions():
+    consumer = Consumer(CONSUMER_CONFIG)
+    consumer.subscribe([KAFKA_TOPIC_ALL])
+
+    # Diccionario para almacenar el último mensaje de cada dron
+    last_messages = {}
+
+    try:
+        while True:
+            msg = consumer.poll(1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    print(f"Error al consumir mensaje: {msg.error()}")
+                    break
+            payload = msg.value().decode('utf-8')
+
+            # Procesa el mensaje y actualiza el último mensaje de cada dron
+            dron_id, x, y, estado = payload.split(',')
+            last_message = f"ID del dron: {dron_id}, Posición: ({x}, {y}), Estado: {estado}"
+            last_messages[dron_id] = last_message
+
+            # Muestra solo el último mensaje de cada dron
+            for dron_id in last_messages:
+                print(last_messages[dron_id])
+            
+    except KeyboardInterrupt:
+        pass
+    finally:
+        consumer.close()
+
 ################################################
 
 ##################FUNCIONES REGISTRO##################
@@ -590,6 +626,10 @@ while True:
                     kafka_thread = threading.Thread(target=esperar_ordenes)
                     kafka_thread.daemon = True
                     kafka_thread.start()
+
+                    consume_thread = threading.Thread(target=consume_drone_positions)
+                    consume_thread.daemon = True
+                    consume_thread.start()
 
                     print(f"Establecida conexión en {ADDRENG}")
 

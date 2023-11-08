@@ -179,6 +179,12 @@ class Map:
         # Borra las posiciones de los drones en el diccionario
         self.drones = {}
 
+    def clear_map(self):
+        # Limpia el mapa estableciendo todos los valores a cero (0)
+        self.matriz = np.zeros((self.tam, self.tam), dtype=int)
+        self.drones = {}  # También limpiamos el diccionario de drones
+        self.drones_parados = {}  # Limpiamos el diccionario de drones parados
+
 if __name__ == "__main__":
     pygame.init()
     screen_width = 800

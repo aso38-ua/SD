@@ -11,9 +11,18 @@ from confluent_kafka import Producer, Consumer, KafkaError
 from map import Map
 import time
 import netifaces
+from collections import defaultdict
+import signal
+import sys
 
+def cleanup_before_exit():
+    # Limpia el mapa y la lista de posiciones de los drones
+    my_map.clear_map()  # Reemplaza 'clear_map' con el método que tengas para limpiar el mapa
+    global global_drone_positions
+    global_drone_positions = []
 
 interfaces = netifaces.interfaces()
+signal.signal(signal.SIGINT, lambda signum, frame: sys.exit(0))
 
 if interfaces:
     # Utiliza la primera interfaz de red disponible
@@ -33,7 +42,7 @@ else:
 
 print(f"La dirección IP seleccionada es: {SERVER}")
 
-
+last_sent_messages = defaultdict(str)
 pygame.init()
 screen_width = 800
 screen_height = 800
@@ -264,6 +273,8 @@ def handle_disconnection(drone_id, x_actual, y_actual):
         except StopIteration:
             print(f"Dron {drone_id} no encontrado en la lista.")
 
+last_sent_messages = {}
+
 def send_drone_positions_to_all():
     # Crea un productor de Kafka
     producer = Producer(PRODUCER_CONFIG)
@@ -273,9 +284,18 @@ def send_drone_positions_to_all():
         (x, y), dron_id, estado = position
         message = f"{dron_id},{x},{y},{estado}"
         
+        # Verifica si ya se ha enviado un mensaje para este dron
+        if dron_id in last_sent_messages:
+            last_message = last_sent_messages[dron_id]
+            if message == last_message:
+                continue  # Salta el mensaje si es igual al último enviado
+
         # Envía la posición a través de Kafka al dron actual
         producer.produce(KAFKA_TOPIC_ALL, key=None, value=message)
         producer.flush()  # Asegúrate de que todos los mensajes se envíen
+
+        # Actualiza el último mensaje enviado para el dron
+        last_sent_messages[dron_id] = message
 
 def handle_client(conn, addr):
     global esperar_figura
@@ -323,7 +343,7 @@ def handle_client(conn, addr):
                         cargar_figura("")  # Borra la figura después de ejecutarla
                         esperar_figura = False  # Deja de esperar figuras
 
-            send_drone_positions_to_all()
+            
 
         except Exception as e:
             print(f"Error al procesar el mensaje: {e}")
@@ -416,7 +436,7 @@ def consume_messages():
                                 # Enviar al dron a (0, 0)...
                                 # Eliminar al dron de global_drone_positions
                                 global_drone_positions = [drone for drone in global_drone_positions if drone[1] != drone_name]
-
+                    send_drone_positions_to_all()
                     print(f"Posición de {drone_name}: ({x}, {y}), Estado: {estado}")
 
                 if verificar_figura_completada():
@@ -437,7 +457,6 @@ def consume_messages():
 
 def main_game_loop():
     global global_drone_positions, my_map
-
     running = True
     while running:
         for event in pygame.event.get():
@@ -496,9 +515,14 @@ def start():
                 print(f"Error al cerrar la conexión: {e}")
 
 # MAIN
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(ADDR)
+try:
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(ADDR)
 
-print("[STARTING] Servidor inicializándose...")
+    print("[STARTING] Servidor inicializándose...")
 
-start()
+    start()
+except KeyboardInterrupt:
+    pass
+finally:
+    cleanup_before_exit()
