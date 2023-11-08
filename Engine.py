@@ -21,26 +21,31 @@ def cleanup_before_exit():
     global global_drone_positions
     global_drone_positions = []
 
-interfaces = netifaces.interfaces()
-signal.signal(signal.SIGINT, lambda signum, frame: sys.exit(0))
 
-if interfaces:
-    # Utiliza la primera interfaz de red disponible
-    interface = interfaces[0]
-    addrs = netifaces.ifaddresses(interface).get(netifaces.AF_INET)
-    if addrs:
-        # Se encontró una interfaz con una dirección IPv4
-        SERVER = addrs[0]['addr']
-        print(f"La dirección IP de la interfaz {interface} es: {SERVER}")
-    else:
-        # No se encontraron interfaces con direcciones IPv4
-        print("No se pudo obtener la dirección IP de ninguna interfaz de red.")
+def get_first_non_local_interface():
+    interfaces = netifaces.interfaces()
+    
+    for interface in interfaces:
+        addrs = netifaces.ifaddresses(interface).get(netifaces.AF_INET, [])
+        
+        for addr_info in addrs:
+            ip = addr_info.get('addr')
+            if ip and not ip.startswith('127.'):
+                return ip
+    
+    return None
+
+eth_interface = get_first_non_local_interface()
+
+if eth_interface:
+    SERVER = eth_interface
+    print(f"La dirección IP de la interfaz de red no local es: {SERVER}")
 else:
-    # No se encontraron interfaces de red
-    print("No se encontraron interfaces de red disponibles.")
+    print("No se pudo encontrar una interfaz de red no local.")
     SERVER = socket.gethostbyname(socket.gethostname())
+    print(f"Usando la dirección IP del host: {SERVER}")
 
-print(f"La dirección IP seleccionada es: {SERVER}")
+
 
 last_sent_messages = defaultdict(str)
 pygame.init()
@@ -54,7 +59,7 @@ global_drone_positions=[]
 # Define un cerrojo para sincronizar el acceso a global_drone_positions
 drone_positions_lock = threading.Lock()
 
-KAFKA_BROKER = "127.0.0.1:9092"
+KAFKA_BROKER = "172.21.243.240:9092"
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
 KAFKA_TOPIC_ORDERS= "dron-back"
@@ -73,7 +78,7 @@ producer = Producer(PRODUCER_CONFIG)
 consumer = Consumer(CONSUMER_CONFIG)
 
 # Ruta al archivo donde se almacenarán las figuras
-archivo_figura = "figura.txt"
+archivo_figura = "AwD_figuras_CorreccionGrupo6.json"
 
 # Bandera para controlar si el motor debe esperar a las figuras
 esperar_figura = False
@@ -81,8 +86,8 @@ esperar_figura = False
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
     parser.add_argument("--port", type=int, default=5051, help="Puerto de escucha")
-    parser.add_argument("--max-drones", type=int, default=30, help="Número máximo de drones a admitir")
-    parser.add_argument("--WIp",type=str,default="10.0.2.15",help="Ip de clima")
+    parser.add_argument("--max-drones", type=int, default=90, help="Número máximo de drones a admitir")
+    parser.add_argument("--WIp",type=str,default="172.21.243.198",help="Ip de clima")
 
     return parser.parse_args()
 

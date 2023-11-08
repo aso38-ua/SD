@@ -27,10 +27,10 @@ KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
 KAFKA_TOPIC_ORDERS= "dron-back"
 KAFKA_TOPIC_ALL="drones-all-positions"
-KAFKA_BROKER = "127.0.0.1:9092"
+KAFKA_BROKER = "172.21.243.240:9092"
 
 CONSUMER_CONFIG = {
-    'bootstrap.servers': '127.0.0.1:9092',
+    'bootstrap.servers': '172.21.243.240:9092',
     'group.id': dron_id,
     'auto.offset.reset': 'earliest'
 }
@@ -45,7 +45,7 @@ HEADER = 64
 PORTENGINE = 5051
 PORTREG = 5050
 PORTBOOT=9092
-IPBOOT="127.0.0.1"
+IPBOOT="172.21.243.240"
 
 FORMAT = 'utf-8'
 
@@ -116,10 +116,10 @@ def id_existe(id, db_cursor):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
-    parser.add_argument("--Engine", type=str, default="127.0.0.1", help="Puerto de escucha")
+    parser.add_argument("--Engine", type=str, default="172.21.243.197", help="Puerto de escucha")
     parser.add_argument("--Id", type=str, help="Id del dron")
-    parser.add_argument("--kafka", type=str,default="127.0.0.1", help="Dirección IP del servidor Kafka")
-    parser.add_argument("--Registry", type=str, default="127.0.1.1", help="Direccion IP del servidor registro")
+    parser.add_argument("--kafka", type=str,default="172.21.243.240", help="Dirección IP del servidor Kafka")
+    parser.add_argument("--Registry", type=str, default="172.21.243.198", help="Direccion IP del servidor registro")
 
     return parser.parse_args()
 
@@ -570,6 +570,7 @@ while True:
                     print(f"Establecida conexión en {ADDREG}")
                     darse_de_baja(sub_opcion)
                 elif sub_opcion=="4":
+                    client.close()
                     break
                 else:
                     print("Opción no válida. Por favor, elija una opción válida.")
