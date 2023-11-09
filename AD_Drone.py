@@ -10,6 +10,15 @@ from confluent_kafka import Consumer, KafkaError, Producer
 import re
 import pygame
 import uuid
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import db
+
+cred = credentials.Certificate("dron-89c7a-firebase-adminsdk-u7k4s-1bb27db4d6.json")
+
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://dron-89c7a-default-rtdb.europe-west1.firebasedatabase.app'
+})
 
 
 def generate_unique_member_id():
@@ -107,11 +116,10 @@ def consume_messages(dron_id):
 
 
 
-def id_existe(id, db_cursor):
+def id_existe(id):
     # Comprueba si el ID ya existe en la base de datos
-    db_cursor.execute("SELECT id FROM drone WHERE id=?", (id,))
-    existe = db_cursor.fetchone()
-    return existe is not None
+    ref = db.reference('/Dron')
+    return ref.child(id).get() is not None
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
@@ -393,14 +401,10 @@ def registrar_dron(opcion):
         nuevo_token = TOKEN  # Reemplaza "tu_token" con el token que desees insertar
 
         # Insertar el nuevo registro en la tabla "drone"
-        if id_existe(ID,cursor) == False:
-            cursor.execute("INSERT INTO drone (id, token) VALUES (?, ?)", (ID, nuevo_token))
+        if id_existe(ID) == False:
+            ref = db.reference(f'/Dron/{ID}')
+            ref.set({'id': ID, 'token': TOKEN})
 
-            # Guardar los cambios en la base de datos
-            conexion.commit()
-
-            # Cerrar la conexión
-            conexion.close()
             print(f"Respuesta del servidor: {TOKEN}")
             print("Dron registrado con éxito!")
             client.close()
@@ -414,7 +418,7 @@ def registrar_dron(opcion):
 
     else:
         print("No se pudo registrar el dron.")
-        
+
     client.close()
 
 # Función para editar el perfil del dron
