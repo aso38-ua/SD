@@ -414,6 +414,7 @@ def registrar_dron(opcion):
 
     else:
         print("No se pudo registrar el dron.")
+        
     client.close()
 
 # Función para editar el perfil del dron

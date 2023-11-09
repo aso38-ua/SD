@@ -51,7 +51,7 @@ else:
 def consume_all_messages():
     # Configuración del consumidor de Kafka
     consumer = Consumer(CONSUMER_CONFIG)
-    consumer.subscribe([KAFKA_TOPIC])
+    consumer.subscribe([KAFKA_TOPIC,KAFKA_TOPIC_ALL,KAFKA_TOPIC_ORDERS,KAFKA_TOPIC_SEC])
 
     try:
         while True:
@@ -369,23 +369,20 @@ def handle_client(conn, addr):
     token=conn.recv(2048).decode(FORMAT)
     conectado=autenticar_dron(conn,token)
     
+    if conectado:
+        kafka_thread = threading.Thread(target=consume_messages)
+        kafka_thread.daemon = True
+        kafka_thread.start()
     
-    while True:
+    while conectado:
         try:
-            # Inicia el hilo para consumir mensajes de Kafka
-            kafka_thread = threading.Thread(target=consume_messages)
-            kafka_thread.daemon = True
-            kafka_thread.start()
             
-            if conectado == False:
-                print(f"[CONEXIÓN CERRADA] Fallo al autenticar, {addr} se ha desconectado.")
-                enviar_estado_desconectado_a_kafka(ID)
-                break
             
             ID=conn.recv(2048).decode(FORMAT)
             
             if not ID:
                 break
+
             with drone_positions_lock:
                 global_drone_positions.append(((0, 0), ID, "moviendo"))
 

@@ -10,7 +10,10 @@ from firebase_admin import credentials
 from firebase_admin import db
 
 cred = credentials.Certificate("sddd-8c96a-firebase-adminsdk-7sqg0-e7dc7ec49d.json")
-firebase_admin.initialize_app(cred)
+
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://sddd-8c96a-default-rtdb.europe-west1.firebasedatabase.app'
+})
 
 def get_first_non_local_interface():
     interfaces = netifaces.interfaces()
@@ -83,6 +86,11 @@ def handle_client(conn, addr):
                         # Insertar los datos en Firebase Realtime Database utilizando el ID del dron
                         ref = db.reference(f'/Dron/{ID}')
                         ref.set({'id': ID, 'token': token})
+
+                        
+
+                        # Envía el token al cliente
+                        conn.send(token.encode(FORMAT))
                     break
                 elif opcion == "2":
                     try:
