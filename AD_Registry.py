@@ -5,7 +5,12 @@ import secrets
 import string
 import sqlite3
 import netifaces
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import db
 
+cred = credentials.Certificate("sddd-8c96a-firebase-adminsdk-7sqg0-e7dc7ec49d.json")
+firebase_admin.initialize_app(cred)
 
 def get_first_non_local_interface():
     interfaces = netifaces.interfaces()
@@ -15,7 +20,7 @@ def get_first_non_local_interface():
         
         for addr_info in addrs:
             ip = addr_info.get('addr')
-            if ip and not ip.startswith('127.'):
+            if ip and not (ip.startswith('127.') or ip.startswith('10.')):
                 return ip
     
     return None
@@ -45,83 +50,73 @@ def generar_token(longitud):
     token = ''.join(secrets.choice(caracteres) for _ in range(longitud))
     return token
 
-def id_existe(id, db_cursor):
+def id_existe(id):
     # Comprueba si el ID ya existe en la base de datos
-    db_cursor.execute("SELECT id FROM Dron WHERE id=?", (id,))
-    existe = db_cursor.fetchone()
-    return existe is not None
+    ref = db.reference('/Dron')
+    return ref.child(id).get() is not None
 
 def handle_client(conn, addr):
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
-    
-    # Crear una conexión de base de datos SQLite para este hilo
-    db_connection = sqlite3.connect('Registro.db')
-    db_cursor = db_connection.cursor()
-    
+
     connected = True
     try:
         while connected:
             mensaje_completo = conn.recv(2048).decode(FORMAT)
-
             mensaje_dividido = mensaje_completo.split(',')
-        
+
             if len(mensaje_dividido) >= 2:
                 opcion, ID = mensaje_dividido[0], mensaje_dividido[1]
 
                 # Ahora tienes la opción y el ID por separado
                 print("Opción:", opcion)
                 print("ID:", ID)
-                
+
                 if opcion == "1":
                     # Opción 1: Registro de dron
-                    if id_existe(ID, db_cursor):
+                    if id_existe(ID):
                         respuesta = "El id ya existe"
                         conn.send(respuesta.encode(FORMAT))
                     else:
                         token = generar_token(longitud_token)
                         print("Token de acceso es: ", token)
-                        
-                        # Insertar los datos en la base de datos
-                        db_cursor.execute("INSERT INTO Dron (token, id) VALUES (?, ?)", (token, ID))
-                        db_connection.commit()
-                        
-                        conn.send(token.encode(FORMAT))
+
+                        # Insertar los datos en Firebase Realtime Database utilizando el ID del dron
+                        ref = db.reference(f'/Dron/{ID}')
+                        ref.set({'id': ID, 'token': token})
                     break
                 elif opcion == "2":
                     try:
-                        if id_existe(ID, db_cursor):
+                        if id_existe(ID):
                             # Recibir el nuevo valor desde el cliente
                             nuevo_valor = conn.recv(2048).decode(FORMAT)
 
-                            # Ejecutar una consulta SQL para actualizar el valor en la tabla
-                            db_cursor.execute("UPDATE Dron SET id = ? WHERE id = ?", (nuevo_valor, ID))
-                            db_connection.commit()
+                            # Actualizar el valor en Firebase
+                            ref = db.reference('/Dron')
+                            ref.child(ID).update({'id': nuevo_valor})
 
                             respuesta = "Valor actualizado con éxito"
                             conn.send(respuesta.encode(FORMAT))
-
                         else:
                             respuesta = "No existe el usuario en la base de datos"
                             conn.send(respuesta.encode(FORMAT))
                         break
                     except Exception as e:
-                        print(f"Error al actualizar el valor en la base de datos: {e}")
-
+                        print(f"Error al actualizar el valor en Firebase: {e}")
                 elif opcion == "3":
                     try:
-                        if id_existe(ID, db_cursor) == False:
+                        if id_existe(ID) == False:
                             respuesta = "El id no existe"
                             conn.send(respuesta.encode(FORMAT))
                         else:
-                            db_cursor.execute("DELETE FROM Dron WHERE id = ?", (ID,))
-                            db_connection.commit()
+                            # Eliminar el dron de Firebase
+                            ref = db.reference('/Dron')
+                            ref.child(ID).delete()
 
                             respuesta = "Dron borrado con éxito"
                             conn.send(respuesta.encode(FORMAT))
                         break
                     except Exception as e:
-                        print(f"Error al borrar el dron en la base de datos: {e}")
-
+                        print(f"Error al borrar el dron en Firebase: {e}")
                 else:
                     # Opción desconocida
                     conn.send("Opción desconocida".encode(FORMAT))
@@ -130,10 +125,7 @@ def handle_client(conn, addr):
     finally:
         conn.close()
 
-
-    print(f"ADIOS. TE ESPERO EN OTRA OCASION [{addr}]")
-    db_cursor.close()
-    db_connection.close()
+    print(f"ADIOS. TE ESPERO EN OTRA OCASIÓN [{addr}]")
 
 def start():
     server.listen()

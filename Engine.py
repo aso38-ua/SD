@@ -14,12 +14,15 @@ import netifaces
 from collections import defaultdict
 import signal
 import sys
+import firebase_admin
+from firebase_admin import credentials, firestore, initialize_app
+from firebase_admin import db
 
-def cleanup_before_exit():
-    # Limpia el mapa y la lista de posiciones de los drones
-    my_map.clear_map()  # Reemplaza 'clear_map' con el método que tengas para limpiar el mapa
-    global global_drone_positions
-    global_drone_positions = []
+
+cred = credentials.Certificate("sddd-8c96a-firebase-adminsdk-7sqg0-e7dc7ec49d.json")
+firebase_admin.initialize_app(cred)
+db = firestore.client()
+
 
 
 def get_first_non_local_interface():
@@ -30,7 +33,7 @@ def get_first_non_local_interface():
         
         for addr_info in addrs:
             ip = addr_info.get('addr')
-            if ip and not ip.startswith('127.'):
+            if ip and not (ip.startswith('127.') or ip.startswith('10.')):
                 return ip
     
     return None
@@ -45,6 +48,54 @@ else:
     SERVER = socket.gethostbyname(socket.gethostname())
     print(f"Usando la dirección IP del host: {SERVER}")
 
+def consume_all_messages():
+    # Configuración del consumidor de Kafka
+    consumer = Consumer(CONSUMER_CONFIG)
+    consumer.subscribe([KAFKA_TOPIC])
+
+    try:
+        while True:
+            # Intenta consumir mensajes con un límite de tiempo
+            msg = consumer.poll(5.0)
+
+            if msg is None:
+                # Si no se reciben mensajes en 5 segundos, sal del bucle
+                print("No se recibieron mensajes en 5 segundos. Saliendo...")
+                break
+
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    print(f"Error al consumir mensaje: {msg.error()}")
+                    break
+
+            # Procesa el mensaje, por ejemplo, imprímelo
+            print(f"Mensaje borrado: {msg.value().decode('utf-8')}")
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # Cierra el consumidor de Kafka al finalizar
+        consumer.close()
+
+
+
+
+def cleanup_before_exit():
+    # Limpia el mapa y la lista de posiciones de los drones
+    my_map.clear_map()  # Reemplaza 'clear_map' con el método que tengas para limpiar el mapa
+    global global_drone_positions
+    global_drone_positions = []
+
+def handle_interrupt_signal(sig, frame):
+    print("Se recibió una señal de interrupción (Ctrl+C). Consumiendo mensajes y cerrando el servidor...")
+    consume_all_messages()
+    cleanup_before_exit()
+    sys.exit(0)
+
+# Registrar la función de manejo de señal
+signal.signal(signal.SIGINT, handle_interrupt_signal)
 
 
 last_sent_messages = defaultdict(str)
@@ -59,7 +110,9 @@ global_drone_positions=[]
 # Define un cerrojo para sincronizar el acceso a global_drone_positions
 drone_positions_lock = threading.Lock()
 
-KAFKA_BROKER = "172.21.243.240:9092"
+drones_conectados = set()
+
+KAFKA_BROKER = "192.168.1.129:9092"
 KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
 KAFKA_TOPIC_ORDERS= "dron-back"
@@ -87,7 +140,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Servidor de drones con Kafka")
     parser.add_argument("--port", type=int, default=5051, help="Puerto de escucha")
     parser.add_argument("--max-drones", type=int, default=90, help="Número máximo de drones a admitir")
-    parser.add_argument("--WIp",type=str,default="172.21.243.198",help="Ip de clima")
+    parser.add_argument("--WIp",type=str,default="192.168.1.129",help="Ip de clima")
 
     return parser.parse_args()
 
@@ -242,12 +295,12 @@ ad_weather_thread.start()
 
 
 
-def autenticar_dron(conn, db_cursor, token):
-    global global_drone_positions
+def autenticar_dron(conn, token):
+    global drones_conectados
 
-    # Consulta la base de datos para verificar si el token de autenticación es válido
-    db_cursor.execute("SELECT Token FROM Dron WHERE Token=?", (token,))
-    resultado = db_cursor.fetchone()
+    # Consulta la base de datos de Firebase para verificar si el token de autenticación es válido
+    dron_ref = db.collection('Dron').where('Token', '==', token)
+    resultado = dron_ref.stream()
 
     if resultado:
         # Autenticación correcta
@@ -305,17 +358,16 @@ def send_drone_positions_to_all():
 def handle_client(conn, addr):
     global esperar_figura
     global global_drone_positions, my_map
+    global drones_conectados
 
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
     # Crear una conexión de base de datos SQLite para este hilo
-    db_connection = sqlite3.connect('Registro.db')
-    db_cursor = db_connection.cursor()
     
     
     
     # Autenticar al dron
     token=conn.recv(2048).decode(FORMAT)
-    conectado=autenticar_dron(conn, db_cursor,token)
+    conectado=autenticar_dron(conn,token)
     
     
     while True:
