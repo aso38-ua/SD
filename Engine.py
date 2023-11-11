@@ -51,7 +51,7 @@ else:
 def consume_all_messages():
     # Configuración del consumidor de Kafka
     consumer = Consumer(CONSUMER_CONFIG)
-    consumer.subscribe([KAFKA_TOPIC,KAFKA_TOPIC_ALL,KAFKA_TOPIC_ORDERS,KAFKA_TOPIC_SEC])
+    consumer.subscribe([KAFKA_TOPIC,KAFKA_TOPIC_ALL,KAFKA_TOPIC_ORDERS,KAFKA_TOPIC_SEC,KAFKA_TOPIC_FIGURES])
 
     try:
         while True:
@@ -117,6 +117,7 @@ KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
 KAFKA_TOPIC_ORDERS= "dron-back"
 KAFKA_TOPIC_ALL="drones-all-positions"
+KAFKA_TOPIC_FIGURES="figures"
 PRODUCER_CONFIG = {
     'bootstrap.servers': KAFKA_BROKER,
     'client.id': 'python-producer'
@@ -159,6 +160,16 @@ AD_WEATHER_PORT = 5052
 
 connected_drones = {}
 
+def send_figuras_to_kafka(topic):
+    global total_figuras, total_drones_figura, nombres_figuras
+
+    producer = Producer(PRODUCER_CONFIG)
+    
+    # Aquí puedes utilizar las variables globales para construir tu mensaje y enviarlo a Kafka
+    message = f"Total de figuras: {total_figuras}, {', '.join(f'{nombre}:{drones}' for nombre, drones in zip(nombres_figuras, total_drones_figura))}"
+    
+    producer.produce(topic, key=None, value=message)
+    producer.flush()
 
 def send_message_to_kafka_from_figuras(topic, final_positions):
     producer = Producer(PRODUCER_CONFIG)
@@ -184,8 +195,10 @@ def ejecutar_figura(id_dron, x_destino, y_destino):
 
 total_drones_figura=[]
 total_figuras=[]
+nombres_figuras = []
 
 def procesar_figuras():
+    global total_figuras, total_drones_figura, nombres_figuras
     try:
         with open(archivo_figura, "r") as file:
             data = json.load(file)
@@ -216,6 +229,7 @@ def procesar_figuras():
                     total_drones += 1
                     print(f"Figura procesada para dron {id_dron} ({nombre_figura}): Posición destino en ({x_destino}, {y_destino})")
                 total_drones_figura.append(total_drones)
+                nombres_figuras.append(nombre_figura)
                 print(f"Figura {nombre_figura} registrada")
                 print(f"Hay {total_drones} drones en esta figura")
 
@@ -231,9 +245,9 @@ def procesar_figuras():
 
     
 
-
 final_positions_por_figura = procesar_figuras()
 
+send_figuras_to_kafka(KAFKA_TOPIC_FIGURES)
 
 
 global drones_que_han_llegado

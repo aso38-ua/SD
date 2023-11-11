@@ -36,6 +36,7 @@ KAFKA_TOPIC = "drones-positions"
 KAFKA_TOPIC_SEC = "drones-coordinate"
 KAFKA_TOPIC_ORDERS= "dron-back"
 KAFKA_TOPIC_ALL="drones-all-positions"
+KAFKA_TOPIC_FIGURES="figures"
 KAFKA_BROKER = "192.168.1.129:9092"
 
 CONSUMER_CONFIG = {
@@ -68,6 +69,63 @@ def send(msg, client_socket):
 id = None
 x = None
 y = None
+
+total_figuras = []
+total_drones_por_figura = []
+nombres_figuras = []
+
+def leer_variables_desde_kafka():
+    global total_figuras, total_drones_por_figura, nombres_figuras
+
+    consumer = Consumer(CONSUMER_CONFIG)
+    consumer.subscribe([KAFKA_TOPIC_FIGURES])  # Asegúrate de suscribirte al topic correcto
+
+    should_exit = False
+
+    try:
+        while not should_exit:
+            msg = consumer.poll(1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    print(f"Error al consumir mensaje: {msg.error()}")
+                    break
+
+            payload = msg.value().decode('utf-8')
+            
+            # Procesa el mensaje de texto
+            try:
+                # Divide la cadena en partes utilizando la coma como separador
+                parts = payload.split(', ')
+
+                # Extrae el total de figuras
+                total_figuras = int(parts[0].split(': ')[1])
+
+                # Extrae datos de cada figura
+                nombres_figuras = []
+                total_drones_por_figura = []
+                for figura_data in parts[1:]:
+                    nombre, drones = figura_data.rsplit(':', 1)
+                    nombres_figuras.append(nombre)
+                    total_drones_por_figura.append(int(drones))
+
+                print("Datos de figuras actualizados:")
+                print(f"Total de figuras: {total_figuras}")
+                for nombre, drones in zip(nombres_figuras, total_drones_por_figura):
+                    print(f"{nombre}: {drones} drones")
+
+                should_exit = True
+                
+            except Exception as e:
+                print(f"Error al procesar el mensaje: {e}")
+
+    finally:
+        consumer.close()
+        print("OK")
+
 
 drone_positions = {}
 
@@ -643,17 +701,21 @@ while True:
                     while not drone_positions:
                         time.sleep(1)  # Espera 1 segundo antes de verificar nuevamente
 
+                    total_figuras = []
+
                     print("Contenido de drone_positions:")
                     for dron_id, positions in drone_positions.items():
                         print(f"ID: {dron_id}")
                         for position, nombre_figura in positions:
                             x, y = position
-                            print(f"  Figura: {nombre_figura}, X: {x}, Y: {y}")
+                            print(f"Figura: {nombre_figura}, X: {x}, Y: {y}")
 
                     position_info = drone_positions.get(ID, [])
                     for position, nombre_figura in position_info:
                         x, y = position
                         print(f"Posición destino del dron {ID} para la figura {nombre_figura}: X: {x}, Y: {y}")
+
+                    leer_variables_desde_kafka()
 
                     time.sleep(3)
                     mover_dron_hacia_destino(ID, x, y)
