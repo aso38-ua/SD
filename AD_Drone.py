@@ -108,9 +108,9 @@ def leer_variables_desde_kafka():
                 nombres_figuras = []
                 total_drones_por_figura = []
                 for figura_data in parts[1:]:
-                    nombre, drones = figura_data.rsplit(':', 1)
-                    nombres_figuras.append(nombre)
-                    total_drones_por_figura.append(int(drones))
+                    nombre, drones = figura_data.split(':')
+                    nombres_figuras.append(nombre.strip())
+                    total_drones_por_figura.append(int(drones.strip().strip("[]")))
 
                 print("Datos de figuras actualizados:")
                 print(f"Total de figuras: {total_figuras}")
@@ -324,12 +324,12 @@ def mover_dron_a_casa(drone_id):
     producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
 global drones_en_destino
-drones_en_destino=0
+drones_en_destino = {}
 # Función para mover el dron hacia la posición final
-def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
+def mover_dron_hacia_destino(drone_id, x_destino, y_destino, figura_actual):
     
         try:
-
+            
             x_actual, y_actual = 0, 0  # Coordenadas iniciales del dron
             global drones_coordinates,drones_en_destino
 
@@ -363,7 +363,7 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
                     drone_positions[drone_id] = (x_actual, y_actual)
 
                     drones_coordinates = [((x_actual, y_actual), drone_id, estado)]
-                    print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}")
+                    print(f"ID: {drone_id}, X: {x_actual}, Y: {y_actual}, Estado: {estado}, Figura: {figura_actual}")
 
                     # Envía la nueva posición y estado a Kafka
                     mensaje_kafka = f"{x_actual},{y_actual},{drone_id},{estado}"
@@ -379,10 +379,15 @@ def mover_dron_hacia_destino(drone_id, x_destino, y_destino):
                 producer.produce(KAFKA_TOPIC_SEC, key=drone_id, value=mensaje_kafka)
                 producer.flush()  # Asegura que el mensaje se envíe a Kafka
 
-                #drones_en_destino+=1
-                #mensaje_drones_en_destino = f"Drones en destino: {drones_en_destino}"
-                #producer.produce(KAFKA_TOPIC_SEC, key=None, value=mensaje_drones_en_destino)
-                #producer.flush()
+                if figura_actual not in drones_en_destino:
+                    drones_en_destino[figura_actual] = 1
+                else:
+                    drones_en_destino[figura_actual] += 1
+
+                if drones_en_destino[figura_actual] == total_drones_por_figura:
+                    print(f"Figura {figura_actual} completada. Reiniciando contadores.")
+                    drones_en_destino[figura_actual] = 0
+
         finally:
             # Libera el semáforo después de completar el movimiento
             movimiento_semaphore.release()
@@ -718,7 +723,41 @@ while True:
                     leer_variables_desde_kafka()
 
                     time.sleep(3)
-                    mover_dron_hacia_destino(ID, x, y)
+                    for nombre_figura in nombres_figuras:
+                        print(f"\nIniciando movimiento del dron para la figura: {nombre_figura}")
+
+                        # Obtener la información de las posiciones para la figura actual
+                        position_info = drone_positions.get(ID)
+
+                        if position_info:
+
+                            drones_llegados_por_figura = {}
+                            
+                            for position, figura_actual in position_info:
+                                x, y = position
+                                print(f"Posición destino del dron {ID} para la figura {figura_actual}: X: {x}, Y: {y}")
+
+                                drones_llegados_por_figura.setdefault(figura_actual, 0)
+                                
+                                # Verificar si el dron ya llegó a la figura actual
+                                if drones_llegados_por_figura[figura_actual] < total_drones_por_figura[nombres_figuras.index(nombre_figura)]:
+                                    # Mover el dron solo si no ha llegado a esta figura
+                                    mover_dron_hacia_destino(ID, x, y, figura_actual)
+
+                                    # Incrementar el contador de drones llegados para la figura actual
+                                    drones_llegados_por_figura[figura_actual] += 1
+
+                                    # Verificar si todos los drones han llegado a la figura actual
+                                    if all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
+                                        print(f"Figura {nombre_figura} completada, mandando a casa")
+
+                                    while not all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
+                                        time.sleep(1)  # Esperar un segundo antes de verificar nuevamente
+
+                                else:
+                                    print(f"Dron {ID} ya llegó a la figura {figura_actual}, esperando a los demás")
+                        else:
+                            print(f"No hay información de posición para el dron {ID}")
 
                     drone_conectado = True  # Marcar el dron como conectado
                 else:
