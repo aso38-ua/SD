@@ -91,8 +91,8 @@ def consume_messages(dron_id):
             
             # Procesa el mensaje y separa los campos
             parts = payload.split(',')
-            if len(parts) == 3:
-                id, x, y = parts
+            if len(parts) == 4:
+                id, x, y, nombre_figura = parts
                 if id == dron_id:
                     # Convierte las coordenadas a enteros si es necesario
                     try:
@@ -101,9 +101,11 @@ def consume_messages(dron_id):
                     except ValueError:
                         pass  # En caso de que no se pueda convertir a entero
                     # Aquí puedes trabajar con los valores de id, x e y
-                    message = (x, y)
-                    drone_positions[dron_id] = message
-                    print(f"Mensaje:{dron_id} en {message}")
+
+                    pos_info = ((x, y), nombre_figura)
+                    if pos_info not in drone_positions.get(id, []):
+                        drone_positions.setdefault(id, []).append(pos_info)
+                        print(f"Mensaje:{dron_id} en {pos_info}")
                     
                 else:
                     print(f"Mensaje ignorado para ID {id}: {payload}")
@@ -485,7 +487,7 @@ def darse_de_baja(opcion):
         cursor = conexion.cursor()
 
         # Insertar el nuevo registro en la tabla "drone"
-        if id_existe(ID,cursor) == False:
+        if id_existe(ID) == False:
             cursor.execute("DELETE FROM drone WHERE id = ?;",  (ID))
 
             # Guardar los cambios en la base de datos
@@ -587,7 +589,7 @@ while True:
                 # Crear un cursor
                 cursor = conexion.cursor()
                 db_cursor = conexion.cursor()
-                if id_existe(ID, cursor):
+                if id_existe(ID):
                     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     client.connect(ADDRENG)
 
@@ -642,13 +644,16 @@ while True:
                         time.sleep(1)  # Espera 1 segundo antes de verificar nuevamente
 
                     print("Contenido de drone_positions:")
-                    for dron_id, position in drone_positions.items():
-                        x, y = position
-                        print(f"ID: {dron_id}, X: {x}, Y: {y}")
+                    for dron_id, positions in drone_positions.items():
+                        print(f"ID: {dron_id}")
+                        for position, nombre_figura in positions:
+                            x, y = position
+                            print(f"  Figura: {nombre_figura}, X: {x}, Y: {y}")
 
-                    position_info = drone_positions[ID]
-                    x, y = position_info  # Desempaqueta la tupla de posición
-                    print(f"Posición destino del dron {ID}: X: {x}, Y: {y}")
+                    position_info = drone_positions.get(ID, [])
+                    for position, nombre_figura in position_info:
+                        x, y = position
+                        print(f"Posición destino del dron {ID} para la figura {nombre_figura}: X: {x}, Y: {y}")
 
                     time.sleep(3)
                     mover_dron_hacia_destino(ID, x, y)

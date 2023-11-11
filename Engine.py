@@ -162,11 +162,14 @@ connected_drones = {}
 
 def send_message_to_kafka_from_figuras(topic, final_positions):
     producer = Producer(PRODUCER_CONFIG)
-    for position, id_dron in final_positions:
-        x_destino, y_destino = position
-        message = f"{id_dron},{x_destino},{y_destino}"
-        producer.produce(topic, key=None, value=message)
-        print(f"Mensaje producido a Kafka: {message}")
+
+    for nombre_figura, posiciones in final_positions.items():
+        for position, id_dron in posiciones:
+            x_destino, y_destino = position
+            message = f"{id_dron},{x_destino},{y_destino},{nombre_figura}"
+            producer.produce(topic, key=None, value=message)
+            print(f"Mensaje producido a Kafka: {message}")
+
     producer.flush()
 
 def cargar_figura(figura):
@@ -179,6 +182,9 @@ def ejecutar_figura(id_dron, x_destino, y_destino):
     # Simulación de movimiento
     time.sleep(2)
 
+total_drones_figura=[]
+total_figuras=[]
+
 def procesar_figuras():
     try:
         with open(archivo_figura, "r") as file:
@@ -188,25 +194,34 @@ def procesar_figuras():
                 print("No se encontraron figuras en el archivo.")
                 return []
 
-            final_positions = []
-            total_drones = 0
+            final_positions = {}
+            
+            
 
             for figura in figuras:
+                total_drones = 0
                 nombre_figura = figura.get("Nombre")
                 drones = figura.get("Drones", [])
+                total_figuras.append(nombre_figura)
                 
                 for dron in drones:
                     id_dron = dron.get("ID")
                     pos = dron.get("POS")
                     x_destino, y_destino = map(int, pos.split(','))
 
-                    final_positions.append(((x_destino, y_destino), id_dron))
+                    if nombre_figura not in final_positions:
+                        final_positions[nombre_figura] = []
+                    final_positions[nombre_figura].append(((x_destino, y_destino), id_dron))
+
                     total_drones += 1
-                    print(f"Figura procesada para dron {id_dron} ({nombre_figura}): Moviendo a ({x_destino}, {y_destino})")
+                    print(f"Figura procesada para dron {id_dron} ({nombre_figura}): Posición destino en ({x_destino}, {y_destino})")
+                total_drones_figura.append(total_drones)
+                print(f"Figura {nombre_figura} registrada")
+                print(f"Hay {total_drones} drones en esta figura")
 
             send_message_to_kafka_from_figuras(KAFKA_TOPIC, final_positions)
             print("Figuras procesadas")
-            return final_positions, total_drones
+            return final_positions
     except FileNotFoundError:
         print("El archivo de figuras no se ha encontrado.")
         return []
@@ -217,9 +232,8 @@ def procesar_figuras():
     
 
 
-final_positions, total_drones_en_la_figura = procesar_figuras()
+final_positions_por_figura = procesar_figuras()
 
-print(f"Total de drones en la figura: {total_drones_en_la_figura}")
 
 
 global drones_que_han_llegado
@@ -228,7 +242,7 @@ drones_que_han_llegado = 0
 
 def verificar_figura_completada():
 
-    return drones_que_han_llegado == total_drones_en_la_figura
+    return #drones_que_han_llegado == total_drones_en_la_figura
 
 # Función para esperar hasta que todos los drones de la figura hayan llegado
 def esperar_figura_completada():
