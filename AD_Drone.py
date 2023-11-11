@@ -78,7 +78,7 @@ def leer_variables_desde_kafka():
     global total_figuras, total_drones_por_figura, nombres_figuras
 
     consumer = Consumer(CONSUMER_CONFIG)
-    consumer.subscribe([KAFKA_TOPIC_FIGURES])  # Asegúrate de suscribirte al topic correcto
+    consumer.subscribe([KAFKA_TOPIC_FIGURES])
 
     should_exit = False
 
