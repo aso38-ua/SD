@@ -1,32 +1,53 @@
 import socket
-import random
-import time
+import sys
 
 HEADER = 64
 PORT = 5050
-SERVER = "127.0.1.1"  # Cambia esta dirección IP por la del servidor
-ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
-FIN = "FIN"
+SERVER = "127.0.1.1"
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(ADDR)
+def send(msg, client_socket):
+    message = msg.encode(FORMAT)
+    msg_length = len(message)
+    send_length = str(msg_length).encode(FORMAT)
+    send_length += b' ' * (HEADER - len(send_length))
+    client_socket.send(send_length)
+    client_socket.send(message)
 
-# Opción 1: Registro de dron
-opcion = 1
-client.send(str(opcion).encode(FORMAT))
+def main():
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect((SERVER, PORT))
+    
+    print(f"Conectado al servidor {SERVER}:{PORT}")
 
-# Espera un momento para la siguiente entrada (puedes ajustar esto)
-time.sleep(8)
+    while True:
+        print("\nMenú:")
+        print("1. Comprobar registro del dron")
+        print("q. Salir")
+        opcion = input("Elija una opción: ")
 
-# ID del dron (puedes cambiarlo)
-id_dron = "DRON123"
-client.send(id_dron.encode(FORMAT))
+        if opcion == "1":
+            id_dron = input("Ingrese el ID del dron que desea comprobar: ")
 
-# Espera la respuesta del servidor
-response = client.recv(HEADER).decode(FORMAT)
-print(response)
+            # Enviar la opción 1 al servidor para comprobar el registro
+            send("1", client)
 
-# Cierra la conexión
-client.send(FIN.encode(FORMAT))
-client.close()
+            # Enviar el ID del dron al servidor
+            send(id_dron, client)
+
+            respuesta = client.recv(HEADER).decode(FORMAT)
+            if respuesta == "registrado":
+                print(f"El dron con ID {id_dron} está registrado.")
+            else:
+                print(f"El dron con ID {id_dron} no está registrado.")
+
+        elif opcion == "q":
+            print("Saliendo del programa. ¡Hasta luego!")
+            client.close()
+            sys.exit()
+        else:
+            print("Opción no válida. Por favor, elija una opción válida.")
+
+if __name__ == "__main__":
+    main()
+

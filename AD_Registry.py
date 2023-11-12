@@ -4,10 +4,43 @@ import random
 import secrets
 import string
 import sqlite3
+import netifaces
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import db
+
+cred = credentials.Certificate("sddd-8c96a-firebase-adminsdk-7sqg0-e7dc7ec49d.json")
+
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://sddd-8c96a-default-rtdb.europe-west1.firebasedatabase.app'
+})
+
+def get_first_non_local_interface():
+    interfaces = netifaces.interfaces()
+    
+    for interface in interfaces:
+        addrs = netifaces.ifaddresses(interface).get(netifaces.AF_INET, [])
+        
+        for addr_info in addrs:
+            ip = addr_info.get('addr')
+            if ip and not (ip.startswith('127.') or ip.startswith('10.')):
+                return ip
+    
+    return None
+
+eth_interface = get_first_non_local_interface()
+
+if eth_interface:
+    SERVER = eth_interface
+    print(f"La dirección IP de la interfaz de red no local es: {SERVER}")
+else:
+    print("No se pudo encontrar una interfaz de red no local.")
+    SERVER = socket.gethostbyname(socket.gethostname())
+    print(f"Usando la dirección IP del host: {SERVER}")
+
 
 HEADER = 64
 PORT = 5050
-SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 FIN = "FIN"
@@ -20,77 +53,110 @@ def generar_token(longitud):
     token = ''.join(secrets.choice(caracteres) for _ in range(longitud))
     return token
 
-def id_existe(id, db_cursor):
+def id_existe(id):
     # Comprueba si el ID ya existe en la base de datos
-    db_cursor.execute("SELECT id FROM Dron WHERE id=?", (id,))
-    existe = db_cursor.fetchone()
-    return existe is not None
+    ref = db.reference('/Dron')
+    return ref.child(id).get() is not None
 
 def handle_client(conn, addr):
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
-    
-    # Crear una conexión de base de datos SQLite para este hilo
-    db_connection = sqlite3.connect('Registro.db')
-    db_cursor = db_connection.cursor()
-    
-    connected = True
-    while connected:
-        try:
-            msg_length = conn.recv(HEADER).decode(FORMAT)
-            if msg_length == 'q':
-                print(f"[CONEXIÓN CERRADA] {addr} se ha desconectado.")
-                break
-            msg_length = int(msg_length)
-            msg = conn.recv(msg_length).decode(FORMAT)
-            
-            if msg_length == 1:
-                # Opción 1: Registro de dron
-                if id_existe(msg, db_cursor):
-                    respuesta = "El id ya existe"
-                    conn.send(respuesta.encode(FORMAT))
-                else:
-                    token = generar_token(longitud_token)
-                    print("Token de acceso es: ", token)
-                    
-                    # Insertar los datos en la base de datos
-                    db_cursor.execute("INSERT INTO Dron (token, id) VALUES (?, ?)", (token, msg))
-                    db_connection.commit()
-                    
-                    conn.send(token.encode(FORMAT))
-            elif msg_length == 2:
-                # Opción 2: Otra acción
-                # Aquí puedes implementar la lógica para la opción 2
-                pass
-            else:
-                # Opción desconocida
-                conn.send("Opción desconocida".encode(FORMAT))
-        except Exception as e:
-            print(f"Error al procesar el mensaje: {e}")
-            break
 
-    print(f"ADIOS. TE ESPERO EN OTRA OCASION [{addr}]")
-    conn.close()
-    db_cursor.close()
-    db_connection.close()
+    connected = True
+    try:
+        while connected:
+            mensaje_completo = conn.recv(2048).decode(FORMAT)
+            mensaje_dividido = mensaje_completo.split(',')
+
+            if len(mensaje_dividido) >= 2:
+                opcion, ID = mensaje_dividido[0], mensaje_dividido[1]
+
+                # Ahora tienes la opción y el ID por separado
+                print("Opción:", opcion)
+                print("ID:", ID)
+
+                if opcion == "1":
+                    # Opción 1: Registro de dron
+                    if id_existe(ID):
+                        respuesta = "El id ya existe"
+                        conn.send(respuesta.encode(FORMAT))
+                    else:
+                        token = generar_token(longitud_token)
+                        print("Token de acceso es: ", token)
+
+                        # Insertar los datos en Firebase Realtime Database utilizando el ID del dron
+                        ref = db.reference(f'/Dron/{ID}')
+                        ref.set({'id': ID, 'token': token})
+
+                        
+
+                        # Envía el token al cliente
+                        conn.send(token.encode(FORMAT))
+                    break
+                elif opcion == "2":
+                    try:
+                        if id_existe(ID):
+                            # Recibir el nuevo valor desde el cliente
+                            nuevo_valor = conn.recv(2048).decode(FORMAT)
+
+                            # Actualizar el valor en Firebase
+                            ref = db.reference('/Dron')
+                            ref.child(ID).update({'id': nuevo_valor})
+
+                            respuesta = "Valor actualizado con éxito"
+                            conn.send(respuesta.encode(FORMAT))
+                        else:
+                            respuesta = "No existe el usuario en la base de datos"
+                            conn.send(respuesta.encode(FORMAT))
+                        break
+                    except Exception as e:
+                        print(f"Error al actualizar el valor en Firebase: {e}")
+                elif opcion == "3":
+                    try:
+                        if id_existe(ID) == False:
+                            respuesta = "El id no existe"
+                            conn.send(respuesta.encode(FORMAT))
+                        else:
+                            # Eliminar el dron de Firebase
+                            ref = db.reference('/Dron')
+                            ref.child(ID).delete()
+
+                            respuesta = "Dron borrado con éxito"
+                            conn.send(respuesta.encode(FORMAT))
+                        break
+                    except Exception as e:
+                        print(f"Error al borrar el dron en Firebase: {e}")
+                else:
+                    # Opción desconocida
+                    conn.send("Opción desconocida".encode(FORMAT))
+    except Exception as e:
+        print(f"Error al procesar la conexión: {e}")
+    finally:
+        conn.close()
+
+    print(f"ADIOS. TE ESPERO EN OTRA OCASIÓN [{addr}]")
 
 def start():
     server.listen()
     print(f"[LISTENING] Servidor a la escucha en {SERVER}")
     CONEX_ACTIVAS = threading.active_count() - 1
     print(CONEX_ACTIVAS)
-    while True:
-        conn, addr = server.accept()
-        CONEX_ACTIVAS = threading.active_count()
-        if (CONEX_ACTIVAS <= MAX_CONEXIONES): 
-            thread = threading.Thread(target=handle_client, args=(conn, addr))
-            thread.start()
-            print(f"[CONEXIONES ACTIVAS] {CONEX_ACTIVAS}")
-            print("CONEXIONES RESTANTES PARA CERRAR EL SERVICIO", MAX_CONEXIONES - CONEX_ACTIVAS)
-        else:
-            print("OOppsss... DEMASIADAS CONEXIONES. ESPERANDO A QUE ALGUIEN SE VAYA")
-            conn.send("OOppsss... DEMASIADAS CONEXEXIONES. Tendrás que esperar a que alguien se vaya".encode(FORMAT))
-            conn.close()
-            CONEX_ACTUALES = threading.active_count() - 1
+    try:
+        while True:
+            conn, addr = server.accept()
+            CONEX_ACTIVAS = threading.active_count()
+            if (CONEX_ACTIVAS <= MAX_CONEXIONES): 
+                thread = threading.Thread(target=handle_client, args=(conn, addr))
+                thread.start()
+                print(f"[CONEXIONES ACTIVAS] {CONEX_ACTIVAS}")
+                print("CONEXIONES RESTANTES PARA CERRAR EL SERVICIO", MAX_CONEXIONES - CONEX_ACTIVAS)
+            else:
+                print("OOppsss... DEMASIADAS CONEXIONES. ESPERANDO A QUE ALGUIEN SE VAYA")
+                conn.send("OOppsss... DEMASIADAS CONEXEXIONES. Tendrás que esperar a que alguien se vaya".encode(FORMAT))
+                conn.close()
+                CONEX_ACTUALES = threading.active_count() - 1
+    except KeyboardInterrupt:
+        print("ADIOS. TE ESPERO EN OTRA OCASION")
+        server.close()
 
 # MAIN
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
