@@ -186,7 +186,7 @@ def parse_arguments():
     parser.add_argument("--Engine", type=str, default="192.168.1.129", help="Puerto de escucha")
     parser.add_argument("--Id", type=str, help="Id del dron")
     parser.add_argument("--kafka", type=str,default="192.168.1.129", help="Dirección IP del servidor Kafka")
-    parser.add_argument("--Registry", type=str, default="192.168.1.129", help="Direccion IP del servidor registro")
+    parser.add_argument("--Registry", type=str, default="192.168.23.124", help="Direccion IP del servidor registro")
 
     return parser.parse_args()
 
@@ -485,45 +485,24 @@ def registrar_dron(opcion):
 def editar_perfil(opcion):
     print("Editando el perfil del dron...")
     global ID
-    # Aquí puedes agregar tu lógica para editar el perfil
+
+    # Combina la opción y el ID con una coma como separador
 
     mensaje = f"{opcion},{ID}"
-
     client.send(mensaje.encode(FORMAT))
 
-    newID = input("Cual es el nuevo id que quieres?: ")
-
+    newID = input("¿Cuál es el nuevo ID que quieres?: ")
     client.send(newID.encode(FORMAT))
 
-    respuesta = client.recv(2048).decode(FORMAT)
-
-    if respuesta:
-        TOKEN = respuesta
-
-        conexion = sqlite3.connect('drone.db')
-
-        # Crear un cursor
-        cursor = conexion.cursor()
-
-        try:
-            cursor.execute("UPDATE drone SET id = ? WHERE id = ?;", (newID, ID))
-            conexion.commit()
-            print(f"Respuesta del servidor: {TOKEN}")
-            print("Dron actualizado con éxito!")
-            ID = newID
-        except sqlite3.IntegrityError:
-            print("Error: Ya existe un dron con este ID. Por favor, elige un ID diferente.")
-        except Exception as e:
-            print(f"Error al actualizar el valor en la base de datos: {e}")
-        finally:
-            conexion.close()
-            client.close()
-
-    else:
-        print("No se pudo actualizar el dron.")
-    
-    client.close()
-
+    try:
+        ref = db.reference(f'/Dron/{ID}')
+        ref.update({"id": newID})
+        print("Dron actualizado con éxito!")
+        ID = newID
+    except Exception as e:
+        print(f"Error al actualizar el valor en la base de datos de Firebase: {e}")
+    finally:
+        client.close()
 
 # Función para darse de baja
 def darse_de_baja(opcion):

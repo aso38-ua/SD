@@ -9,6 +9,9 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 
+id_conectados=[]
+
+
 cred = credentials.Certificate("sddd-8c96a-firebase-adminsdk-7sqg0-e7dc7ec49d.json")
 
 firebase_admin.initialize_app(cred, {
@@ -58,80 +61,102 @@ def id_existe(id):
     ref = db.reference('/Dron')
     return ref.child(id).get() is not None
 
+def esta_ocupado(id, conectados):
+    print("UWU")
+    for a in conectados:
+        print("a :",a)
+        print("id: ",id)
+        if(a==id):
+            print("TRUE")
+            return True
+    print("False")    
+    return False
+
 def handle_client(conn, addr):
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
 
     connected = True
     try:
         while connected:
+            
             mensaje_completo = conn.recv(2048).decode(FORMAT)
             mensaje_dividido = mensaje_completo.split(',')
 
             if len(mensaje_dividido) >= 2:
                 opcion, ID = mensaje_dividido[0], mensaje_dividido[1]
-
+                
                 # Ahora tienes la opción y el ID por separado
                 print("Opción:", opcion)
                 print("ID:", ID)
-
-                if opcion == "1":
-                    # Opción 1: Registro de dron
-                    if id_existe(ID):
-                        respuesta = "El id ya existe"
-                        conn.send(respuesta.encode(FORMAT))
-                    else:
-                        token = generar_token(longitud_token)
-                        print("Token de acceso es: ", token)
-
-                        # Insertar los datos en Firebase Realtime Database utilizando el ID del dron
-                        ref = db.reference(f'/Dron/{ID}')
-                        ref.set({'id': ID, 'token': token})
-
-                        
-
-                        # Envía el token al cliente
-                        conn.send(token.encode(FORMAT))
-                    break
-                elif opcion == "2":
-                    try:
+                if esta_ocupado(ID,id_conectados)==False:
+                    id_conectados.append(ID)
+                    print(id_conectados)
+                    if opcion == "1":
+                        # Opción 1: Registro de dron
                         if id_existe(ID):
-                            # Recibir el nuevo valor desde el cliente
-                            nuevo_valor = conn.recv(2048).decode(FORMAT)
-
-                            # Actualizar el valor en Firebase
-                            ref = db.reference('/Dron')
-                            ref.child(ID).update({'id': nuevo_valor})
-
-                            respuesta = "Valor actualizado con éxito"
+                            respuesta = "El id ya existe"
                             conn.send(respuesta.encode(FORMAT))
                         else:
-                            respuesta = "No existe el usuario en la base de datos"
-                            conn.send(respuesta.encode(FORMAT))
-                        break
-                    except Exception as e:
-                        print(f"Error al actualizar el valor en Firebase: {e}")
-                elif opcion == "3":
-                    try:
-                        if id_existe(ID) == False:
-                            respuesta = "El id no existe"
-                            conn.send(respuesta.encode(FORMAT))
-                        else:
-                            # Eliminar el dron de Firebase
-                            ref = db.reference('/Dron')
-                            ref.child(ID).delete()
+                            token = generar_token(longitud_token)
+                            print("Token de acceso es: ", token)
 
-                            respuesta = "Dron borrado con éxito"
-                            conn.send(respuesta.encode(FORMAT))
+                            # Insertar los datos en Firebase Realtime Database utilizando el ID del dron
+                            ref = db.reference(f'/Dron/{ID}')
+                            ref.set({'id': ID, 'token': token})
+
+                            
+
+                            # Envía el token al cliente
+                            conn.send(token.encode(FORMAT))
                         break
-                    except Exception as e:
-                        print(f"Error al borrar el dron en Firebase: {e}")
+                    elif opcion == "2":
+                        try:
+                            if id_existe(ID):
+                                # Recibir el nuevo valor desde el cliente
+                                nuevo_valor = conn.recv(2048).decode(FORMAT)
+                                print("NUEVO: ", nuevo_valor)
+
+                                # Actualizar el valor en Firebase
+                                ref = db.reference('/Dron')
+                                ref.update({'id': nuevo_valor})
+
+                                respuesta = "Valor actualizado con éxito"
+                                conn.send(respuesta.encode(FORMAT))
+                            else:
+                                respuesta = "No existe el usuario en la base de datos"
+                                conn.send(respuesta.encode(FORMAT))
+                            break
+                        except Exception as e:
+                            print(f"Error al actualizar el valor en Firebase: {e}")
+                    elif opcion == "3":
+                        try:
+                            if id_existe(ID) == False:
+                                respuesta = "El id no existe"
+                                conn.send(respuesta.encode(FORMAT))
+                            else:
+                                # Eliminar el dron de Firebase
+                                ref = db.reference('/Dron')
+                                ref.child(ID).delete()
+
+                                respuesta = "Dron borrado con éxito"
+                                conn.send(respuesta.encode(FORMAT))
+                            break
+                        except Exception as e:
+                            print(f"Error al borrar el dron en Firebase: {e}")
+                    else:
+                        # Opción desconocida
+                        conn.send("Opción desconocida".encode(FORMAT))
                 else:
-                    # Opción desconocida
-                    conn.send("Opción desconocida".encode(FORMAT))
+                    conn.send("Nao nao amigao ya esta otro".encode(FORMAT))
+                    print("EL DRON YA ESTA CONECTADO")
+                    return
+
     except Exception as e:
         print(f"Error al procesar la conexión: {e}")
     finally:
         conn.close()
+        if(esta_ocupado(ID,id_conectados)==True):
+            id_conectados.remove(ID)
 
     print(f"ADIOS. TE ESPERO EN OTRA OCASIÓN [{addr}]")
 

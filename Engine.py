@@ -387,6 +387,7 @@ def handle_client(conn, addr):
     global esperar_figura
     global global_drone_positions, my_map
     global drones_conectados
+    numFig=0
 
     print(f"[NUEVA CONEXIÓN] {addr} connected.")
     # Crear una conexión de base de datos SQLite para este hilo
@@ -414,6 +415,8 @@ def handle_client(conn, addr):
             with drone_positions_lock:
                 global_drone_positions.append(((0, 0), ID, "moviendo"))
 
+            
+
             if esperar_figura:
                 print("Esperando una figura para ejecutar...")
                 # Aquí puedes implementar la lógica para leer una figura desde el archivo
@@ -423,7 +426,11 @@ def handle_client(conn, addr):
                         print(f"Se encontró una figura para ejecutar:\n{figura}")
                         # Procesa y ejecuta la figura
                         cargar_figura("")  # Borra la figura después de ejecutarla
-                        esperar_figura = False  # Deja de esperar figuras
+                        numFig=numFig+1
+                        #esperar_figura = False  # Deja de esperar figuras
+            #Si es la ultima figura
+            if(numFig==total_figuras):
+                return False
 
             
 
