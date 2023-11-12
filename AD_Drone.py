@@ -48,6 +48,7 @@ CONSUMER_CONFIG = {
 
 PRODUCER_CONFIG = {
     'bootstrap.servers': KAFKA_BROKER,
+    'acks': 'all',
     'client.id': 'python-producer'
 }
 
@@ -327,9 +328,9 @@ global drones_en_destino
 drones_en_destino = {}
 # Función para mover el dron hacia la posición final
 def mover_dron_hacia_destino(drone_id, x_destino, y_destino, figura_actual):
-    
+        
         try:
-            
+            global x_actual, y_actual
             x_actual, y_actual = 0, 0  # Coordenadas iniciales del dron
             global drones_coordinates,drones_en_destino
 
@@ -576,6 +577,8 @@ def darse_de_baja(opcion):
 ############################################################################
 
 ####################Menú principal########################################
+global x_actual, y_actual
+x_actual, y_actual = 0, 0
 
 def main_game_loop():
     global drones_coordinates
@@ -732,6 +735,7 @@ while True:
                         if position_info:
 
                             drones_llegados_por_figura = {}
+                            x_actual, y_actual = 0, 0
                             
                             for position, figura_actual in position_info:
                                 x, y = position
@@ -740,22 +744,27 @@ while True:
                                 drones_llegados_por_figura.setdefault(figura_actual, 0)
                                 
                                 # Verificar si el dron ya llegó a la figura actual
-                                if drones_llegados_por_figura[figura_actual] < total_drones_por_figura[nombres_figuras.index(nombre_figura)]:
-                                    # Mover el dron solo si no ha llegado a esta figura
+
+                                if (x, y) == (x_actual, y_actual):
+                                    print(f"Dron {ID} ya llegó a la figura {figura_actual}, esperando a los demás")
+                                    drones_llegados_por_figura[figura_actual] += 1
+                                # Mover el dron solo si no ha llegado a esta figura
+                                else:
                                     mover_dron_hacia_destino(ID, x, y, figura_actual)
 
-                                    # Incrementar el contador de drones llegados para la figura actual
-                                    drones_llegados_por_figura[figura_actual] += 1
+                                drones_llegados_por_figura[figura_actual] += 1
+                                print(f"Dron {ID} ya llegó a la figura {figura_actual}, esperando a los demás")
 
-                                    # Verificar si todos los drones han llegado a la figura actual
-                                    if all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
-                                        print(f"Figura {nombre_figura} completada, mandando a casa")
+                                x_actual, y_actual = x, y
 
-                                    while not all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
-                                        time.sleep(1)  # Esperar un segundo antes de verificar nuevamente
+                                # Verificar si todos los drones han llegado a la figura actual
+                                if all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
+                                    print(f"Figura {nombre_figura} completada, mandando a casa")
 
-                                else:
-                                    print(f"Dron {ID} ya llegó a la figura {figura_actual}, esperando a los demás")
+                                while not all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
+                                    time.sleep(1)  # Esperar un segundo antes de verificar nuevamente
+
+                                
                         else:
                             print(f"No hay información de posición para el dron {ID}")
 
@@ -782,4 +791,5 @@ while True:
             send_disconnection_notification_to_engine(client,ID)  # Envía una notificación de desconexión al motor
             client.close()
             sys.exit(0)  # Sale del programa
+
     #elif (PORT==5051):
