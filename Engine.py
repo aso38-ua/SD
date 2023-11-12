@@ -166,8 +166,9 @@ def send_figuras_to_kafka(topic):
     producer = Producer(PRODUCER_CONFIG)
     
     # Aquí puedes utilizar las variables globales para construir tu mensaje y enviarlo a Kafka
-    message = f"Total de figuras: {total_figuras}, {', '.join(f'{nombre}:{drones}' for nombre, drones in zip(nombres_figuras, total_drones_figura))}"
+    message = f"Total de figuras: {len(total_figuras)}, {', '.join(f'{nombre}:{drones}' for nombre, drones in zip(nombres_figuras, total_drones_figura))}"
     
+    print(message)
     producer.produce(topic, key=None, value=message)
     producer.flush()
 
