@@ -1,0 +1,6 @@
+numpy
+requests
+netifaces
+firebase_admin
+pygame
+confluent_kafka
