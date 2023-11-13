@@ -15,10 +15,15 @@ from firebase_admin import credentials
 from firebase_admin import db
 
 cred = credentials.Certificate("dron-89c7a-firebase-adminsdk-u7k4s-1bb27db4d6.json")
+cred2 = credentials.Certificate("figura-b6bdd-firebase-adminsdk-enlzl-3ca393cede.json")
 
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://dron-89c7a-default-rtdb.europe-west1.firebasedatabase.app'
 })
+
+firebase_admin.initialize_app(cred2, {
+    'databaseURL': 'https://figura-b6bdd-default-rtdb.europe-west1.firebasedatabase.app'
+}, name='figura')
 
 
 def generate_unique_member_id():
@@ -175,6 +180,16 @@ def consume_messages(dron_id):
     finally:
         consumer.close()
 
+def obtener_valor_actual(figura_actual):
+    ref = db_ref.child(f'Drones_en_destino/{figura_actual}')
+    snapshot = ref.get()
+    return snapshot if snapshot is not None else None
+
+def obtener_valores_hilo():
+    while True:
+        valores_actuales = {figura: obtener_valor_actual(figura) for figura in nombres_figuras}
+        time.sleep(1)
+
 
 
 def id_existe(id):
@@ -315,7 +330,7 @@ def mover_dron_a_casa(drone_id):
 
         time.sleep(4)  # Espera antes de la siguiente actualización de posición
 
-    estado = "en reposo"  # El dron llegó a casa y se encuentra en reposo
+    estado = "moviendo"  # El dron llegó a casa y se encuentra en reposo
     drones_coordinates = [((x_destino, y_destino), drone_id, estado)]
     print(f"Dron {drone_id} ha llegado a casa en (0, 0), Estado: {estado}")
 
@@ -731,17 +746,36 @@ while True:
                                 else:
                                     mover_dron_hacia_destino(ID, x, y, figura_actual)
 
+                                db_ref = db.reference(app=firebase_admin.get_app(name='figura'))
+
+                                ref = db_ref.child(f'Drones_en_destino/{figura_actual}')
+
+                                # Incrementar la columna drones_en_destino para la figura actual
+                                ref.transaction(lambda current_value: (current_value or 0) + 1)
+
+
+                                hilo_obtener_valores = threading.Thread(target=obtener_valores_hilo)
+                                hilo_obtener_valores.start()
+
+
                                 drones_llegados_por_figura[figura_actual] += 1
                                 print(f"Dron {ID} ya llegó a la figura {figura_actual}, esperando a los demás")
 
                                 x_actual, y_actual = x, y
 
+                                valores_actuales = {figura: obtener_valor_actual(figura) for figura in nombres_figuras}
+                                print("Valores actuales:", valores_actuales)
                                 # Verificar si todos los drones han llegado a la figura actual
-                                if all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
-                                    print(f"Figura {nombre_figura} completada, mandando a casa")
+                                valor_figura_actual = total_drones_por_figura[nombres_figuras.index(figura_actual)]
 
-                                while not all(drones_llegados_por_figura[figura] == total_drones_por_figura[nombres_figuras.index(nombre_figura)] for figura in drones_llegados_por_figura):
-                                    time.sleep(1)  # Esperar un segundo antes de verificar nuevamente
+                                print(valor_figura_actual)
+
+                                while obtener_valor_actual(figura_actual) < valor_figura_actual:
+                                    time.sleep(1)
+
+                                print("Hola")
+
+                                mover_dron_a_casa(ID)
 
                                 
                         else:
