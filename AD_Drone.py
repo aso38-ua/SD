@@ -516,8 +516,16 @@ def editar_perfil(opcion):
     client.send(newID.encode(FORMAT))
 
     try:
-        ref = db.reference(f'/Dron/{ID}')
-        ref.update({"id": newID})
+        ref_old = db.reference(f'/Dron/{ID}')
+        data = ref_old.get()  # Obtener los datos actuales del nodo
+
+        # Eliminar el nodo existente con el ID antiguo
+        ref_old.delete()
+
+        # Crear un nuevo nodo con el ID actualizado y los datos existentes
+        ref_new = db.reference(f'/Dron/{newID}')
+        ref_new.set(data)
+        
         print("Dron actualizado con éxito!")
         ID = newID
     except Exception as e:
@@ -539,27 +547,19 @@ def darse_de_baja(opcion):
     
     if respuesta:
 
-        conexion = sqlite3.connect('drone.db')
-
-        # Crear un cursor
-        cursor = conexion.cursor()
-
         # Insertar el nuevo registro en la tabla "drone"
         if id_existe(ID) == False:
-            cursor.execute("DELETE FROM drone WHERE id = ?;",  (ID))
 
-            # Guardar los cambios en la base de datos
-            conexion.commit()
-
-            # Cerrar la conexión
-            conexion.close()
+            ref = db.reference(f'/Dron/{ID}')
+            ref.delete()
+            
             print(f"Respuesta del servidor: {respuesta}")
             print("Dron eliminado con éxito!")
             client.close()
 
         else:
             print("Ya existe el ID")
-            conexion.close()
+
             client.close()
 
     else:
@@ -773,15 +773,17 @@ while True:
                                 while obtener_valor_actual(figura_actual) < valor_figura_actual:
                                     time.sleep(1)
 
-                                print("Hola")
+                                print("Figura completada, volviendo a casa...")
+                                time.sleep(4)
 
                                 mover_dron_a_casa(ID)
-
+                                time.sleep(6)
                                 
                         else:
                             print(f"No hay información de posición para el dron {ID}")
 
                     drone_conectado = True  # Marcar el dron como conectado
+                    print("Todas las figuras han sido completadas")
                 else:
                     print(f"No estás registrado {ID}")
             else:
