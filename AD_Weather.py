@@ -7,6 +7,7 @@ import netifaces
 import keyboard
 
 actualizar_flag = True
+keyboard_flag = True
 
 def get_first_non_local_interface():
     interfaces = netifaces.interfaces()
@@ -52,7 +53,13 @@ def actualizar_manual():
         cursor = conexion.cursor()
 
         # Solicita la nueva temperatura al usuario
-        nueva_temperatura = float(input("Ingresa la nueva temperatura: "))
+        input_temperatura = input("Ingresa la nueva temperatura: ")
+
+        # Remove non-numeric characters from the input
+        cleaned_input = ''.join(char for char in input_temperatura if char.isdigit() or char == '-')
+        
+        # Convert the cleaned input to an integer
+        nueva_temperatura = int(cleaned_input)
 
         # Actualiza la base de datos con la nueva temperatura
         cursor.execute("UPDATE clima SET temperatura = ?", (nueva_temperatura,))
@@ -67,13 +74,14 @@ def actualizar_manual():
         # Cierra la conexión a la base de datos
         conexion.close()
 
+
 def stop_keyboard_listener():
     global keyboard_flag
     keyboard_flag = False
     print("Deteniendo el hilo del teclado. Espere a que finalice.")
 
 def keyboard_listener():
-    global keyboard_flag
+    global actualizar_flag
     modo_manual = False
 
     while keyboard_flag:
@@ -89,6 +97,7 @@ def keyboard_listener():
         elif modo_manual and keyboard.is_pressed('r'):
             print("Volviendo al modo aleatorio...")
             modo_manual = False
+            actualizar_flag=True
 
 def temperatura():
     conexion = sqlite3.connect('clima.db')  # Conecta a la base de datos SQLite
